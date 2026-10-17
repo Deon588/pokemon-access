@@ -59,6 +59,11 @@ check.eq(M.take_reply(1), nil, "a reply is taken once")
 lib:push("REPLY\t2\tCANCEL\n")
 M.poll()
 check.eq(M.take_reply(2), { ok = false, values = {} }, "REPLY CANCEL")
+lib:push("KEY\tDOWN\tT\n")
+M.poll()
+lib:push("REPLY\t3\tOK\tx\n")
+M.poll()
+check.eq(M.held_keys(), {}, "a reply clears keys pressed while the dialog was up")
 
 check.eq(M.read8(0xC000), 0x42, "read8 uses the bus")
 check.eq(M.read16(0xC000), 0x1042, "read16")
@@ -86,6 +91,15 @@ M.shutdown()
 fake:fire("frame")
 check.eq(frames, 1, "shutdown removes the callbacks")
 check.eq(M.connected(), false, "shutdown closes the link")
+
+-- Loading the entry script twice: compat has replaced the globals by then, so
+-- setup must reuse the emulator objects it captured the first time.
+_G.emu = { __pokemon_access_compat = true }
+_G.input = { read = function() return {} end }
+M.setup{}
+check.eq(M.read8(0xC000), 0x42, "a second setup keeps the real emulator objects")
+check.eq(M.has_key_events, false, "and does not mistake compat's input table for mGBA's")
+M.shutdown()
 fake.remove()
 
 -- mGBA 0.11: key events in Lua, breakpoints available
@@ -98,6 +112,8 @@ fake2:fire("key", { key = 72, state = 1, modifiers = 3 })
 check.eq(M.held_keys(), { H = true, shift = true }, "raw key events feed the tracker")
 check.eq(M.set_breakpoint(0x603, function() end), true, "breakpoints are armed when available")
 check.eq(fake2.breakpoints_set, { 0x603 }, "at the requested address")
+M.set_breakpoint(0x603, function() end)
+check.eq(fake2.breakpoints_cleared, { 1 }, "re-arming the same address clears the previous breakpoint")
 M.send_hello("Lua 5.4")
 check.eq(lib2.sent[#lib2.sent], "HELLO\t1\tlua\tLua 5.4\tsecret\n", "HELLO reports the lua key source and the token from the environment")
 M.shutdown()

@@ -52,10 +52,14 @@ function fake.install(opts)
     return emu.memory.cart0:read8(offset) | (emu.memory.cart0:read8(offset + 1) << 8)
   end
   function emu.memory.cart0:readRange(offset, n) return f.rom:sub(offset + 1, offset + n) end
+  f.breakpoints_cleared = {}
   if opts.breakpoints then
     function emu:setBreakpoint(fn, addr)
       f.breakpoints_set[#f.breakpoints_set + 1] = addr
       return #f.breakpoints_set
+    end
+    function emu:clearBreakpoint(id)
+      f.breakpoints_cleared[#f.breakpoints_cleared + 1] = id
     end
   end
 
@@ -79,6 +83,7 @@ function fake.install(opts)
   local console = {}
   function console:log(text) check_thread(); f.logs[#f.logs + 1] = text end
 
+  _G.pokemon_access_mgba_runtime = nil
   _G.emu = emu
   _G.callbacks = callbacks
   _G.console = console
@@ -91,6 +96,7 @@ function fake.install(opts)
   end
 
   function f.remove()
+    _G.pokemon_access_mgba_runtime = nil
     _G.emu, _G.callbacks, _G.console, _G.socket, _G.input =
       saved.emu, saved.callbacks, saved.console, saved.socket, saved.input
     os.getenv, os.execute = saved.getenv, saved.execute

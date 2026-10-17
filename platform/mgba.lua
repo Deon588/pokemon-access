@@ -104,13 +104,22 @@ function M.rom_read8(offset) return M.call(raw_rom_read8, offset) end
 function M.rom_read16(offset) return M.call(raw_rom_read16, offset) end
 function M.platform_id() return M.call(raw_platform_id) end
 
--- 0.11 only; returns false on 0.10.5 so the caller can poll instead.
+-- 0.11 only; returns false on 0.10.5 so the caller can poll instead. Arming an
+-- address again (upstream re-registers on every init) clears the previous one.
 local function raw_set_breakpoint(addr, fn)
   local emu = M.runtime.emu
   if emu.setBreakpoint == nil then
     return false
   end
-  local ok = pcall(function() emu:setBreakpoint(fn, addr) end)
+  local previous = M.breakpoint_ids[addr]
+  if previous ~= nil and emu.clearBreakpoint ~= nil then
+    pcall(function() emu:clearBreakpoint(previous) end)
+    M.breakpoint_ids[addr] = nil
+  end
+  local ok, id = pcall(function() return emu:setBreakpoint(fn, addr) end)
+  if ok then
+    M.breakpoint_ids[addr] = id
+  end
   return ok
 end
 
@@ -268,6 +277,8 @@ local function on_reply(fields)
     values[#values + 1] = fields[i]
   end
   M.replies[id] = { ok = fields[3] == "OK", values = values }
+  -- Keys pressed while the dialog was up must not fire commands afterwards.
+  M.keys:clear()
 end
 
 -- HELLO: protocol version, key source, runtime info, and the launch token the
@@ -343,13 +354,19 @@ function M.setup(opts)
   -- shift+Y or shift+V would never match).
   os.setlocale("C", "numeric")
   os.setlocale("C", "collate")
-  M.runtime = {
-    emu = emu,
-    callbacks = callbacks,
-    console = console,
-    socket = socket,
-    input = rawget(_G, "input"),
-  }
+  -- compat.install() replaces the globals `emu` and `input`, so the emulator
+  -- objects are captured once per Lua state and reused when the entry script
+  -- is loaded again.
+  if rawget(_G, "pokemon_access_mgba_runtime") == nil then
+    _G.pokemon_access_mgba_runtime = {
+      emu = emu,
+      callbacks = callbacks,
+      console = console,
+      socket = socket,
+      input = rawget(_G, "input"),
+    }
+  end
+  M.runtime = _G.pokemon_access_mgba_runtime
   M.has_key_events = M.runtime.input ~= nil
   local source = opts.key_source or "auto"
   if source == "auto" then
@@ -368,6 +385,7 @@ function M.setup(opts)
   M.connect_failure_logged = false
   M.link = nil
   M.callback_ids = {}
+  M.breakpoint_ids = {}
   M.speech = Speech.new(send_speech)
   if M.key_source == "lua" then
     add_callback("key", function(event)

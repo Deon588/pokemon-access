@@ -18,6 +18,9 @@ function fake.new()
       return #data
     end
     function sock:receive(max)
+      if lib.eof then
+        return ""
+      end
       if #lib.incoming == 0 then
         return nil, lib.ERRORS.AGAIN
       end

@@ -84,6 +84,8 @@ function Link:poll()
       return
     end
     if data == "" then
+      -- an empty read is the peer closing the connection
+      self:disconnect("closed by the helper")
       return
     end
     for _, line in ipairs(self.buffer:feed(data)) do

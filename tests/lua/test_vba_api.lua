@@ -56,6 +56,8 @@ check.eq(audio.play("/x/sounds\\gb\\s_grass.wav", 0, -100, 30), 1, "audio.play r
 check.eq(fake.calls[#fake.calls], { "play_sound", "/x/sounds/gb/s_grass.wav", false, -100, 30 }, "audio.play translates the path and the loop flag")
 audio.play("/x/a.wav", 1, 0, 50)
 check.eq(fake.calls[#fake.calls][3], true, "loop 1 means looping")
+audio.play("/x/a.wav", 0, -88.888888888889, 30.5)
+check.eq(fake.calls[#fake.calls], { "play_sound", "/x/a.wav", false, -88, 30 }, "float pan and volume are truncated to integers like the C API took")
 audio.stop(1)
 check.eq(fake.calls[#fake.calls], { "stop_sound", 1 }, "audio.stop")
 audio.pitch(1.5, 1)
@@ -115,6 +117,17 @@ api.poll_exec()
 check.eq(fired, 1, "a position change fires the handler once")
 memory.registerexec(0x603, nil)
 check.eq(api.exec_handlers[0x603], nil, "nil unregisters")
+
+memory.registerexec(0x603, function() error("hook boom") end)
+fake.mem[0xD362] = 7
+api.poll_exec()
+check.eq(api.exec_handlers[0x603], nil, "a failing hook is turned off")
+check.eq(fake.calls[#fake.calls], { "speak", "A Pokemon Access handler failed and was turned off. See the log." }, "and the player hears about it once")
+check.truthy(fake.logs[#fake.logs]:find("hook boom", 1, true), "with the error in the log")
+local speaks_before = #fake.calls
+fake.mem[0xD362] = 8
+api.poll_exec()
+check.eq(#fake.calls, speaks_before, "later position changes stay quiet")
 
 local with_breakpoints = fake_platform.new{ breakpoints = true }
 local api2 = compat.install(with_breakpoints)

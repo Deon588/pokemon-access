@@ -11,6 +11,7 @@ local compat = {}
 -- Executing these addresses meant "the ROM (re)started" on VBA; they map to
 -- the platform's reset notification instead of a breakpoint.
 local RESET_ADDRESSES = { [0x100] = true, [0x8000000] = true }
+local HANDLER_FAILED_MESSAGE = "A Pokemon Access handler failed and was turned off. See the log."
 
 local original = {
   loadfile = loadfile,
@@ -132,11 +133,17 @@ local function install_modules(platform)
   end
 
   -- Upstream runs assert(package.loadlib("audio.dll", "luaopen_audio"))() and
-  -- relies on the opener defining the global `audio`, as the DLL did.
+  -- relies on the opener defining the global `audio`, as the DLL did. The DLL
+  -- took C integers for pan and volume; upstream's menu cursor pan is a float
+  -- in Lua 5.4 (200 * (line - 1) / 18 - 100), so both are truncated here.
+  local function to_integer(value, default)
+    value = tonumber(value) or default
+    return value >= 0 and math.floor(value) or math.ceil(value)
+  end
   local audio = {
     play = function(path, loop, pan, vol)
       local looping = loop == true or (type(loop) == "number" and loop ~= 0)
-      return platform.play_sound(fix_path(path), looping, pan or 0, vol or 100)
+      return platform.play_sound(fix_path(path), looping, to_integer(pan, 0), to_integer(vol, 100))
     end,
     stop = function(id) platform.stop_sound(id) end,
     pitch = function(value, id) platform.set_pitch(id, value) end,
@@ -221,7 +228,10 @@ function compat.install(platform)
     for addr, handler in pairs(api.exec_handlers) do
       local ok, err = pcall(handler)
       if not ok then
-        platform.log(string.format("exec handler at 0x%x failed: %s", addr, tostring(err)))
+        -- A handler that fails once would fail on every step: say so once and drop it.
+        api.exec_handlers[addr] = nil
+        platform.log(string.format("exec handler at 0x%x failed and was removed: %s", addr, tostring(err)))
+        platform.speak(HANDLER_FAILED_MESSAGE)
       end
     end
   end
