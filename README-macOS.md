@@ -51,8 +51,12 @@ for this Mac only; see "Signing" below.
 5. mGBA starts with your ROM. When the script is ready it says "Ready". Switch
    to mGBA (Command Tab) and play.
 
-Quitting Pokemon Access quits mGBA too, politely, so your in-game save is
-written. Quitting mGBA quits Pokemon Access.
+Quitting Pokemon Access (Command Q) quits mGBA too, politely, so your in-game
+save is written. Quitting mGBA quits Pokemon Access. Closing the status window
+only hides it; opening the app again from Spotlight or the Dock brings it back.
+Play one ROM per session: to switch games, quit and open Pokemon Access again.
+If mGBA is already running when you open Pokemon Access, it asks you to quit
+that mGBA first.
 
 ## Playing
 

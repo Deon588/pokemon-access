@@ -457,6 +457,19 @@ rename prompt with a saved name, and pathfinding ("No path" after the gb.lua pat
 Text reading could not be exercised: upstream reads the screen only when the font
 tiles are in video RAM, which a header-only ROM does not load.
 
+The whole-branch review (2026-10-17) found no critical issue; its important
+findings were fixed: upstream's menu cursor pan is a float in Lua 5.4 and the
+helper refused it, so pan and volume are now truncated on both sides (the Windows
+`audio.dll` took C integers); the speech router no longer holds a lock while
+calling an engine and runs every engine call on the main queue asynchronously,
+removing a deadlock window at quit time. Of its minor findings, the ones a
+player would meet were fixed too: Return in the status window no longer quits,
+status changes are announced, a file that is not a ROM reopens the chooser, a
+running mGBA stops the launch, keys pressed while a prompt is open are dropped,
+a failing emulated hook is announced once and removed, an empty socket read
+counts as a closed connection, the entry script can be loaded twice, and on
+0.11 re-arming the footstep breakpoint clears the old one.
+
 Hotkeys use Carbon `RegisterEventHotKey` (section 8), registered while mGBA is
 frontmost and only when the script reported `helper` as its key source; on
 mGBA 0.11 the script takes key events itself and reports `lua`. The footstep hook
