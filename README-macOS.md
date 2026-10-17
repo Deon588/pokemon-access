@@ -123,6 +123,10 @@ Saves (`.sav`) sit next to the ROM.
 - A ROM the game logic does not recognise is announced as "Game not
   supported." Red and Blue in English are recognised by their header checksums;
   other dumps and hacks need the hack ROM setup, which is not in this version.
+- "Pokemon Access script error. See the log." means the game logic hit an
+  error; the script restarts by itself a few seconds later and says "Ready"
+  again. After three errors in a row it stops and asks you to reset the game
+  (Command R in mGBA). The log has the details for a bug report.
 
 ## Signing
 
@@ -146,6 +150,10 @@ CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)" scripts/build-app.sh -
   `tools/dev/run_in_mgba.sh ROM --send 'KEY\tDOWN\tT' --send 'KEY\tUP\tT'`.
 - The app without mGBA: `helper/.build/debug/PokemonAccess --no-launch --port
   48891`, then talk to it with `nc` using the protocol in `PORTING.md` 6.2.
+- Game logic without a game: `tools/dev/make_fake_game_rom.py fake_red.gb` makes
+  a ROM with Red's header on blank data; run it with `tools/dev/run_in_mgba.sh`
+  and scripted keys to exercise every hotkey. `POKEMON_ACCESS_DEBUG_KEYS=1` in
+  mGBA's environment logs the keys the script sees.
 
 Layout: `pokemon-access.lua` is the entry point mGBA loads; `platform/` talks
 to mGBA and the app; `compat/` recreates the VBA-ReRecording Lua API the

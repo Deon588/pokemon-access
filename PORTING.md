@@ -127,7 +127,7 @@ Files on the Red/Blue path: `pokemon.lua` (entry), `gb.lua` (Game Boy engine),
 | `math.pow` | `a-star.lua:41` | nil | `math.pow = function(a, b) return a ^ b end` |
 | `string.format("%d", x)` with a non-integral float | `gb.lua:151-170` and others pass integers today; division results such as `(i-1)/20` at `gb.lua:62` are floats used only as table keys and in arithmetic | Raises "number has no integer representation" | Audit while testing; use `//` where an integer is required |
 | `loadstring`, `setfenv` | `serpent.lua` | nil, but serpent already falls back to `load` and guards `setfenv` | None |
-| Locale | `string.format("%0.2f%%")` at `gb.lua:543` | mGBA's process runs with the user's locale: `%.3f` printed `0,322` | Call `os.setlocale("C", "numeric")` at start, or format health without `%f` |
+| Locale | `string.format("%0.2f%%")` at `gb.lua:543`; `table.sort(pressed_keys)` at `pokemon.lua:474` compared with command keys written in ASCII order (`{"Y", "shift"}`) | mGBA's process runs with the user's locale: `%.3f` printed `0,322`, and alphabetical collation sorts `shift` before `Y` and `V`, so shift+Y and shift+V never matched (found with the header-only ROM on 2026-10-17) | `platform/mgba.lua` sets the numeric and collate categories to C in `setup()` |
 
 Everything parses under Lua 5.4.9 (`luac -p` on all 166 files reported no errors), so
 the differences are runtime only.
@@ -368,10 +368,14 @@ The upstream files on the Red/Blue path need zero edits with the shim approach; 
 only deliberate additions are new files (`pokemon-access.lua`, `platform/`, `compat/`,
 `helper/`, `bin/`, `tools/`, this document). `git merge upstream/master` stays trivial.
 
-Patches made (decision 3): `pokemon.lua`, three lines in `init_script`, calling
-`message.set_strings(default_language)` before the game is recognised so that an
-unknown ROM is announced as "Game not supported." instead of the message id. The
-file keeps its CRLF line endings.
+Patches made (decision 3), both keeping the files' CRLF line endings:
+
+- `pokemon.lua`, three lines in `init_script`: `message.set_strings(default_language)`
+  before the game is recognised, so an unknown ROM is announced as "Game not
+  supported." instead of the message id.
+- `gb.lua`, four lines in `find_path_to_xy`: return nil when no node matches the
+  player or the destination, so upstream says "No path" instead of crashing in
+  `astar.path` with a nil table index (seen when map data is blank or not ready).
 
 Cleanups worth proposing upstream later, which would let the shim shrink: forward
 slashes in the `loadfile` paths (they work on Windows too), guarding the
@@ -436,6 +440,23 @@ message is not a `HELLO` with that token; `SOUND <id> <path> <loop> <pan> <vol>`
 <caption> <multi> <default indices, comma separated> <items...>`; `LOG <level>
 <text>`. A pending line longer than 64 KB drops the connection.
 
+After a Lua error the runner speaks "Pokemon Access script error. See the log.",
+starts the program again three seconds later, up to three times in a row (a minute
+of running earns the restarts back), then says "Pokemon Access stopped after
+repeated script errors. Reset the game to try again." An emulator reset always
+restarts it. `POKEMON_ACCESS_DEBUG_KEYS=1` in mGBA's environment logs every key
+message and the held keys the script sees.
+
+`tools/dev/make_fake_game_rom.py` writes a 1 MiB ROM with Pokémon Red's (or Blue's)
+header and checksum, filled with 0xFF (upstream's table terminator) and a program
+that writes HELLO into the text area. Upstream recognises it and runs its real
+game code on blank data, which exercised every hotkey on mGBA 0.10.5 without a
+copyrighted ROM: Ready, map name, position, objects and filters, battle HP replies,
+tiles, all camera moves with panned wall sounds, follow toggle, HM setting, the
+rename prompt with a saved name, and pathfinding ("No path" after the gb.lua patch).
+Text reading could not be exercised: upstream reads the screen only when the font
+tiles are in video RAM, which a header-only ROM does not load.
+
 Hotkeys use Carbon `RegisterEventHotKey` (section 8), registered while mGBA is
 frontmost and only when the script reported `helper` as its key source; on
 mGBA 0.11 the script takes key events itself and reports `lua`. The footstep hook
@@ -463,9 +484,12 @@ map or position changes; on 0.11 `emu:setBreakpoint` is used.
 Status on 2026-10-17: step 1 is verified end to end with the generated test ROM on
 both the installed mGBA 0.10.5 (Scripting-window loading through Accessibility) and
 the 0.11 build (`--script`). Carbon hot keys were verified live (T, shift+H,
-shift+0 arrive as `KEY` messages). Steps 2 to 8 are implemented and unit-tested
-and wait for the player's ROM (`docs/game-checklist.md`). Step 9 is implemented;
-the prompts were driven through Accessibility in development mode.
+shift+0 arrive as `KEY` messages). Steps 2 to 9 ran on the installed mGBA 0.10.5
+against the header-only Red ROM (section 6.7) through the fake helper, every
+hotkey producing upstream's expected speech, sounds or prompt on blank data; only
+text reading (step 2) and the real map, object and battle values wait for the
+player's ROM (`docs/game-checklist.md`). Step 9's prompt was also driven through
+Accessibility in development mode.
 
 Found on the way: mGBA 0.10.5 rejects emu, console and socket calls made from a
 coroutine ("Function called from invalid context"); 0.11 accepts them. The platform
