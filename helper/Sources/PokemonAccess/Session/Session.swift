@@ -62,7 +62,7 @@ final class Session {
         self.launcher = launcher
 
         let locator = RomLocator(romsDirectory: AppPaths.romsDirectory, preferences: Preferences.shared)
-        guard let rom = locator.resolve(opened: options.rom ?? openedRom) else {
+        guard let rom = locator.resolve(explicit: options.rom, opened: openedRom) else {
             throw SessionError.romMissing
         }
         let (header, warning) = locator.describe(rom)

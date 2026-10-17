@@ -4,8 +4,13 @@
 #   scripts/build-app.sh            builds build/Pokemon Access.app
 #   scripts/build-app.sh --install  also replaces ~/Applications/Pokemon Access.app
 #
-# The bundle is signed ad hoc with a designated requirement that names only
-# the bundle identifier, so the Accessibility grant survives rebuilds.
+# Signing: by default the bundle is signed ad hoc with a designated requirement
+# that names only the bundle identifier, so the Accessibility grant survives
+# rebuilds on this Mac. The trade-off: any ad hoc binary claiming that
+# identifier would match the grant too. With a code signing certificate in the
+# keychain, set CODESIGN_IDENTITY (for example "Apple Development: Name (TEAM)")
+# to sign with it and keep codesign's default requirement, which pins the
+# certificate chain.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 APP="$ROOT/build/Pokemon Access.app"
@@ -28,8 +33,14 @@ for item in pokemon-access.lua pokemon.lua gb.lua gba.lua a-star.lua serpent.lua
   rsync -a --delete --exclude .DS_Store "$ROOT/$item" "$APP/Contents/Resources/lua/"
 done
 
-codesign --force --sign - --identifier "$IDENTIFIER" \
-  --requirements "=designated => identifier \"$IDENTIFIER\"" "$APP"
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+  codesign --force --sign "$CODESIGN_IDENTITY" --identifier "$IDENTIFIER" --options runtime "$APP"
+  echo "signed with $CODESIGN_IDENTITY"
+else
+  codesign --force --sign - --identifier "$IDENTIFIER" \
+    --requirements "=designated => identifier \"$IDENTIFIER\"" "$APP"
+  echo "signed ad hoc (set CODESIGN_IDENTITY to use a certificate)"
+fi
 echo "built $APP ($VERSION)"
 
 if [[ "${1:-}" == "--install" ]]; then

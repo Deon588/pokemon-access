@@ -19,8 +19,13 @@ final class RomLocator {
         self.preferences = preferences
     }
 
-    func resolve(opened: URL?) -> URL? {
+    /// `explicit` (the --rom option) is used as is; `opened` (a file opened with
+    /// the application) is used and remembered for next time.
+    func resolve(explicit: URL?, opened: URL?) -> URL? {
         let files = FileManager.default
+        if let explicit, files.fileExists(atPath: explicit.path) {
+            return explicit
+        }
         if let opened, files.fileExists(atPath: opened.path) {
             remember(opened)
             return opened
