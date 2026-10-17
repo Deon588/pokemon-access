@@ -258,7 +258,7 @@ the Accessibility permission (the hot keys themselves need none).
 | Topic | Finding |
 |-------|---------|
 | AVSpeechSynthesizer from a CLI process | Works without an app bundle. 180 voices installed. First audio callback after 19 ms, `stopSpeaking(at: .immediate)` returns true and the synthesizer is reusable immediately. `swiftc -O` builds the spike in about 19 s. |
-| VoiceOver speech passthrough | `osascript -e 'tell application "VoiceOver" to output "..."'` spoke the text in 0.12 s wall time including process start. Requires "Allow VoiceOver to be controlled with AppleScript" in VoiceOver Utility, which is already enabled on this Mac. Uses the user's own VoiceOver voice and rate with no configuration. The dictionary's `output` command takes text and an optional spelling type and exposes no queue or interrupt parameter, so whether consecutive outputs queue or cut each other off has to be checked by ear in Phase 2; it could not be judged from this unattended session. Upstream depends on queueing (`output_lines` speaks up to 18 lines, `speak_path` one utterance per segment, `read_menu_item` up to three), so this route batches one command's utterances into a single `output` call. |
+| VoiceOver speech passthrough | `osascript -e 'tell application "VoiceOver" to output "..."'` spoke the text in 0.12 s wall time including process start. Requires "Allow VoiceOver to be controlled with AppleScript" in VoiceOver Utility, which is already enabled on this Mac. Uses the user's own VoiceOver voice and rate with no configuration. The dictionary's `output` command takes text and an optional spelling type and exposes no queue or interrupt parameter, so whether consecutive outputs queue or cut each other off has to be checked by ear in Phase 2; it could not be judged from this unattended session. Upstream depends on queueing (`output_lines` speaks up to 18 lines, `speak_path` one utterance per segment, `read_menu_item` up to three), so this route batches one command's utterances into a single `output` call. Phase 2: the Lua side batches per frame (`platform/speech.lua`); `tools/dev/vo_output_semantics.swift` tells queueing from interruption by watching the audio output device and still has to be run with the screen unlocked. |
 | `say` | 2.06 s wall time for a one-word utterance including startup; one process per utterance; no interruption except killing the process. Fallback only. |
 | VoiceOver voice settings | Not readable from `com.apple.VoiceOver4/default.plist` with `plutil` (no voice or rate keys found), so "use VoiceOver's voice" is best achieved by routing speech through VoiceOver itself (above) rather than copying its settings into AVSpeechSynthesizer. |
 | Sound cues | mGBA's Lua has no audio API on either version. The helper can preload the 33 WAV files (1.7 MB, 17 of them used on the Red/Blue path) into `AVAudioPlayer` instances, which expose `pan` (-1..1) and `volume` (0..1), matching `audio.play`'s pan -100..100 and volume 0..100. `/usr/bin/afplay` exists for a fallback without pan. |
@@ -368,6 +368,11 @@ The upstream files on the Red/Blue path need zero edits with the shim approach; 
 only deliberate additions are new files (`pokemon-access.lua`, `platform/`, `compat/`,
 `helper/`, `bin/`, `tools/`, this document). `git merge upstream/master` stays trivial.
 
+Patches made (decision 3): `pokemon.lua`, three lines in `init_script`, calling
+`message.set_strings(default_language)` before the game is recognised so that an
+unknown ROM is announced as "Game not supported." instead of the message id. The
+file keeps its CRLF line endings.
+
 Cleanups worth proposing upstream later, which would let the shim shrink: forward
 slashes in the `loadfile` paths (they work on Windows too), guarding the
 `package.loadlib("audio.dll")` line, replacing `module(...)` in `a-star.lua` with a
@@ -406,6 +411,37 @@ local table, and `unpack = unpack or table.unpack`.
 | The volume and pan scale of the Windows `audio.dll` is unknown: its source is not published, and nuive's forks of mGBA and VBA-M carry no related change. Upstream passes volumes of 5 to 40 and pan steps of 5 per tile | Treat volume as linear percent and pan as linear, expose a global gain in the helper config, calibrate by ear against the Windows build before Phase 3 step 7 |
 | macOS ties the Accessibility grant to the helper's code signature, so an unsigned rebuild loses it | Sign development builds with a stable identity (`codesign -s` with a Developer ID or a locally created certificate) and re-check the grant on every start |
 
+### 6.7 As built
+
+Lua, loaded by mGBA: `pokemon-access.lua` (entry), `platform/mgba.lua` (memory,
+callbacks, keys, speech, sounds, prompts, logging over the helper link, with
+`say` and `afplay` fallbacks), `platform/helper_link.lua`, `platform/protocol.lua`,
+`platform/keys.lua`, `platform/speech.lua`, `platform/runner.lua` (the frame-driven
+coroutine with reset handling), `platform/vba.lua` (the same interface on VBA,
+parsed only), `compat/vba_api.lua`, `compat/bit.lua`, `compat/lua51.lua`. Tests in
+`tests/lua`, run by `tests/lua/run.sh` on Homebrew Lua 5.4.
+
+Swift, `helper/`: `PokemonAccessCore` (protocol, messages, hotkey table, ROM
+header, mGBA config, launch options, handshake gate) with XCTest coverage, and the
+`PokemonAccess` application (speech engines and router, TCP server, sound player,
+Carbon hot keys, mGBA locating and launching, Accessibility-driven script
+injection, ROM discovery, prompts, the session flow and the status window).
+`scripts/build-app.sh` assembles and signs `Pokemon Access.app`;
+`scripts/smoke-test.sh` runs the whole chain with the generated test ROM.
+
+Protocol additions since 6.2: `HELLO` carries a fifth field, the launch token
+from `POKEMON_ACCESS_TOKEN`, and the server drops any connection whose first
+message is not a `HELLO` with that token; `SOUND <id> <path> <loop> <pan> <vol>`,
+`SOUND_STOP <id>`, `SOUND_PITCH <id> <value>`; `PROMPT_CHOICE <id> <title>
+<caption> <multi> <default indices, comma separated> <items...>`; `LOG <level>
+<text>`. A pending line longer than 64 KB drops the connection.
+
+Hotkeys use Carbon `RegisterEventHotKey` (section 8), registered while mGBA is
+frontmost and only when the script reported `helper` as its key source; on
+mGBA 0.11 the script takes key events itself and reports `lua`. The footstep hook
+(`memory.registerexec(0x603)`) is emulated on 0.10.5 by firing when the player's
+map or position changes; on 0.11 `emu:setBreakpoint` is used.
+
 ## 7. Phase 3 steps, mapped to the pieces above
 
 1. "Ready" spoken on load: entry script, compat shim core (memory, frameadvance
@@ -423,6 +459,13 @@ local table, and `unpack = unpack or table.unpack`.
 9. Proposed addition: shift+K and shift+M rename prompts through `PROMPT_TEXT` and
    the yield-until-reply shim. Hack ROM setup (shift+0, list prompts plus directory
    listing) stays out until a later phase; see decision 6.
+
+Status on 2026-10-17: step 1 is verified end to end with the generated test ROM on
+the mGBA 0.11 build (`--script` mode); the 0.10.5 Scripting-window loading is
+implemented and waits for a run with the screen unlocked, as do the live hot key
+check and the VoiceOver queueing experiment. Steps 2 to 8 are implemented and
+unit-tested and wait for the player's ROM (`docs/game-checklist.md`). Step 9 is
+implemented; the prompts were driven through Accessibility in development mode.
 
 ## 8. Decisions taken before Phase 2
 
