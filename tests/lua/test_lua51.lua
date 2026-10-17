@@ -1,0 +1,20 @@
+local check = require("check")
+require("compat.lua51").install()
+
+check.eq(select("#", unpack({1, 2, 3})), 3, "unpack is the global table.unpack")
+check.eq(math.pow(2, 10), 1024, "math.pow")
+check.truthy(loadstring, "loadstring exists")
+
+local chunk = load('module("probe_mod", package.seeall) function f() return math.max(1, 2) end', "=probe")
+chunk()
+check.eq(type(probe_mod), "table", "module creates a global table")
+check.eq(probe_mod.f(), 2, "functions land in the module table and globals stay reachable")
+check.eq(package.loaded.probe_mod, probe_mod, "module registers in package.loaded")
+check.eq(_G.probe_mod, probe_mod, "module table is the global")
+check.eq(_G.f, nil, "module functions do not leak into _G")
+check.eq(probe_mod._NAME, "probe_mod", "_NAME is set")
+
+local second = load('module("probe_mod") function g() return 7 end', "=probe2")
+second()
+check.eq(probe_mod.g(), 7, "a second module() call reuses the same table")
+check.done()
