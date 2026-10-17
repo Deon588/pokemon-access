@@ -10,7 +10,8 @@ log.info("Pokemon Access \(AppVersion.current) starting: \(CommandLine.arguments
 if options.noLaunch {
     // Development mode: speak and serve the protocol without launching mGBA.
     let speech = SpeechRouter(preference: Preferences.shared.speechEngine, log: log)
-    let handler = MessageHandler(speech: speech, log: log)
+    let sounds = SoundPlayer(root: AppPaths.luaRoot(override: options.luaRoot), gain: Preferences.shared.soundGain, log: log)
+    let handler = MessageHandler(speech: speech, sounds: sounds, log: log)
     let server = HelperServer(port: options.port ?? 0, log: log)
     server.onMessage = { message in
         handler.handle(message) { server.send($0) }
