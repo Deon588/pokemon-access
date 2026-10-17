@@ -1,6 +1,6 @@
 /// Messages the Lua side sends to the helper.
 public enum LuaMessage: Equatable {
-    case hello(protocolVersion: Int, keySource: KeySource, info: String)
+    case hello(protocolVersion: Int, keySource: KeySource, info: String, token: String?)
     case speak(interrupt: Bool, text: String)
     case silence
     case sound(id: Int, path: String, loop: Bool, pan: Int, volume: Int)
@@ -27,7 +27,8 @@ public enum LuaMessage: Equatable {
         case "HELLO":
             try need(4)
             guard let source = KeySource(rawValue: fields[2]) else { throw LuaMessageError.malformed(type) }
-            return .hello(protocolVersion: try int(1), keySource: source, info: fields[3])
+            let token = fields.count > 4 && !fields[4].isEmpty ? fields[4] : nil
+            return .hello(protocolVersion: try int(1), keySource: source, info: fields[3], token: token)
         case "SPEAK":
             try need(3)
             return .speak(interrupt: flag(1), text: fields[2])

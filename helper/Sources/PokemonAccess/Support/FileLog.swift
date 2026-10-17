@@ -33,8 +33,11 @@ final class FileLog {
     func info(_ message: String) { write("info", message) }
     func error(_ message: String) { write("error", message) }
 
+    /// One entry per line: newlines inside a message (script tracebacks, text
+    /// from the Lua side) are written as the two characters backslash-n.
     private func write(_ level: String, _ message: String) {
-        let line = "\(formatter.string(from: Date())) \(level) \(message)\n"
+        let flat = message.replacingOccurrences(of: "\r", with: "\\r").replacingOccurrences(of: "\n", with: "\\n")
+        let line = "\(formatter.string(from: Date())) \(level) \(flat)\n"
         let data = Data(line.utf8)
         queue.async { [handle] in
             try? handle?.write(contentsOf: data)

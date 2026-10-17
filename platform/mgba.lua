@@ -208,10 +208,12 @@ local function on_reply(fields)
   M.replies[id] = { ok = fields[3] == "OK", values = values }
 end
 
+-- HELLO: protocol version, key source, runtime info, and the launch token the
+-- helper handed us through POKEMON_ACCESS_TOKEN (empty when started by hand).
 function M.send_hello(info)
   M.hello_info = info
   if M.connected() then
-    M.link:send({ "HELLO", M.PROTOCOL_VERSION, M.key_source, info })
+    M.link:send({ "HELLO", M.PROTOCOL_VERSION, M.key_source, info, M.token or "" })
   end
 end
 
@@ -268,7 +270,8 @@ end
 
 -- Lifecycle -------------------------------------------------------------
 
--- opts.port (default POKEMON_ACCESS_PORT), opts.key_source ("auto" | "helper" | "lua").
+-- opts.port (default POKEMON_ACCESS_PORT), opts.token (default POKEMON_ACCESS_TOKEN),
+-- opts.key_source ("auto" | "helper" | "lua").
 function M.setup(opts)
   opts = opts or {}
   M.runtime = {
@@ -285,6 +288,7 @@ function M.setup(opts)
   end
   M.key_source = source
   M.port = tonumber(opts.port or os.getenv("POKEMON_ACCESS_PORT"))
+  M.token = opts.token or os.getenv("POKEMON_ACCESS_TOKEN")
   M.keys = Keys.new()
   M.replies = {}
   M.next_prompt_id = 0

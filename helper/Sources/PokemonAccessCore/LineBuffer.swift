@@ -7,6 +7,9 @@ public struct LineBuffer {
 
     public init() {}
 
+    /// Bytes waiting for their newline; a cap on this bounds memory per client.
+    public var pendingCount: Int { pending.count }
+
     public mutating func feed(_ data: Data) -> [String] {
         pending.append(contentsOf: data)
         var lines: [String] = []

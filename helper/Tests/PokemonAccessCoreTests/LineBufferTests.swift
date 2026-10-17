@@ -17,3 +17,13 @@ final class LineBufferTests: XCTestCase {
         XCTAssertEqual(buffer.feed(Data(bytes[4...])), ["Pokémon"])
     }
 }
+
+final class LineBufferLimitTests: XCTestCase {
+    func testPendingCountGrowsUntilALineCompletes() {
+        var buffer = LineBuffer()
+        _ = buffer.feed(Data(repeating: UInt8(ascii: "a"), count: 10))
+        XCTAssertEqual(buffer.pendingCount, 10)
+        _ = buffer.feed(Data("\n".utf8))
+        XCTAssertEqual(buffer.pendingCount, 0)
+    }
+}

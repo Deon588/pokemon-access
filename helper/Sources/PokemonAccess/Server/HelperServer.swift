@@ -3,13 +3,18 @@ import Network
 import PokemonAccessCore
 
 /// TCP server on 127.0.0.1 for the Lua side. One client at a time: a new
-/// connection replaces the previous one (the script was reloaded).
+/// connection replaces the previous one (the script was reloaded) once it
+/// has sent a valid HELLO; connections that start with anything else, or with
+/// the wrong launch token, are dropped.
 final class HelperServer {
     private let requestedPort: UInt16
+    private let token: String?
     private let log: FileLog
     private let queue = DispatchQueue(label: "pokemon-access.server")
     private var listener: NWListener?
     private var client: ClientConnection?
+    /// Connections that have not sent their HELLO yet; kept alive until they do or close.
+    private var candidates: [ObjectIdentifier: ClientConnection] = [:]
 
     private(set) var port: UInt16 = 0
     var onMessage: ((LuaMessage) -> Void)?
@@ -17,8 +22,10 @@ final class HelperServer {
     var onDisconnect: (() -> Void)?
 
     /// `port` 0 asks the system for a free port; `start()` returns the actual one.
-    init(port: UInt16, log: FileLog) {
+    /// `token` nil accepts any HELLO (development mode).
+    init(port: UInt16, token: String?, log: FileLog) {
         requestedPort = port
+        self.token = token
         self.log = log
     }
 
@@ -52,28 +59,48 @@ final class HelperServer {
     }
 
     private func accept(_ connection: NWConnection) {
-        client?.cancel()
-        let client = ClientConnection(connection)
-        client.onLine = { [weak self] line in
-            guard let self else { return }
+        let candidate = ClientConnection(connection)
+        candidates[ObjectIdentifier(candidate)] = candidate
+        var accepted = false
+        candidate.onLine = { [weak self, weak candidate] line in
+            guard let self, let candidate else { return }
             let fields = LineProtocol.decode(line)
+            let message: LuaMessage
             do {
-                let message = try LuaMessage.parse(fields)
-                self.onMessage?(message)
+                message = try LuaMessage.parse(fields)
             } catch {
-                self.log.error("bad message from script: \(error) in \(line)")
+                if accepted {
+                    self.log.error("bad message from script: \(error) in \(line)")
+                } else {
+                    self.log.error("rejected connection: first line was not a protocol message")
+                    candidate.cancel()
+                }
+                return
             }
+            if !accepted {
+                guard HandshakeGate.accepts(first: message, expectedToken: self.token) else {
+                    self.log.error("rejected connection: first message was not a HELLO with the launch token")
+                    candidate.cancel()
+                    return
+                }
+                accepted = true
+                self.candidates.removeValue(forKey: ObjectIdentifier(candidate))
+                self.client?.cancel()
+                self.client = candidate
+                self.log.info("script connected")
+                self.onConnect?()
+            }
+            self.onMessage?(message)
         }
-        client.onClosed = { [weak self, weak client] in
-            guard let self, self.client === client else { return }
+        candidate.onClosed = { [weak self, weak candidate] in
+            guard let self, let candidate else { return }
+            self.candidates.removeValue(forKey: ObjectIdentifier(candidate))
+            guard self.client === candidate else { return }
             self.client = nil
             self.log.info("script disconnected")
             self.onDisconnect?()
         }
-        self.client = client
-        client.start(on: queue)
-        log.info("script connected")
-        onConnect?()
+        candidate.start(on: queue)
     }
 
     func send(_ message: HelperMessage) {
@@ -81,6 +108,8 @@ final class HelperServer {
     }
 
     func stop() {
+        candidates.values.forEach { $0.cancel() }
+        candidates = [:]
         client?.cancel()
         client = nil
         listener?.cancel()

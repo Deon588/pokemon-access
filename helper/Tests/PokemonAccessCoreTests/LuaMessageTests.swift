@@ -4,7 +4,7 @@ import XCTest
 final class LuaMessageTests: XCTestCase {
     func testHello() throws {
         XCTAssertEqual(try LuaMessage.parse(["HELLO", "1", "helper", "Lua 5.4"]),
-                       .hello(protocolVersion: 1, keySource: .helper, info: "Lua 5.4"))
+                       .hello(protocolVersion: 1, keySource: .helper, info: "Lua 5.4", token: nil))
     }
 
     func testSpeak() throws {
@@ -44,5 +44,14 @@ final class LuaMessageTests: XCTestCase {
         XCTAssertThrowsError(try LuaMessage.parse(["SOUND", "x", "/p.wav", "0", "0", "0"])) { error in
             XCTAssertEqual(error as? LuaMessageError, .malformed("SOUND"))
         }
+    }
+}
+
+final class LuaMessageTokenTests: XCTestCase {
+    func testHelloCarriesAnOptionalToken() throws {
+        XCTAssertEqual(try LuaMessage.parse(["HELLO", "1", "helper", "Lua 5.4", "secret"]),
+                       .hello(protocolVersion: 1, keySource: .helper, info: "Lua 5.4", token: "secret"))
+        XCTAssertEqual(try LuaMessage.parse(["HELLO", "1", "lua", "Lua 5.4"]),
+                       .hello(protocolVersion: 1, keySource: .lua, info: "Lua 5.4", token: nil))
     }
 }

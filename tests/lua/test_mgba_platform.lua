@@ -18,7 +18,7 @@ check.truthy(M.connected(), "connects to the port from the environment")
 check.eq(lib.sock.port, 48890, "to the right port")
 
 M.send_hello("Lua 5.4")
-check.eq(lib.sent[#lib.sent], "HELLO\t1\thelper\tLua 5.4\n", "HELLO carries protocol version, key source and info")
+check.eq(lib.sent[#lib.sent], "HELLO\t1\thelper\tLua 5.4\t\n", "HELLO carries protocol version, key source, info and an empty token")
 
 M.speak("a")
 M.speak("b")
@@ -90,7 +90,7 @@ fake.remove()
 
 -- mGBA 0.11: key events in Lua, breakpoints available
 local lib2 = fake_socket.new()
-local fake2 = fake_mgba.install{ key_events = true, breakpoints = true, env = { POKEMON_ACCESS_PORT = "48890" }, socket = lib2 }
+local fake2 = fake_mgba.install{ key_events = true, breakpoints = true, env = { POKEMON_ACCESS_PORT = "48890", POKEMON_ACCESS_TOKEN = "secret" }, socket = lib2 }
 M.setup{}
 check.eq(M.has_key_events, true, "0.11 exposes the input object")
 check.eq(M.key_source, "lua", "so keys come from Lua events")
@@ -99,7 +99,7 @@ check.eq(M.held_keys(), { H = true, shift = true }, "raw key events feed the tra
 check.eq(M.set_breakpoint(0x603, function() end), true, "breakpoints are armed when available")
 check.eq(fake2.breakpoints_set, { 0x603 }, "at the requested address")
 M.send_hello("Lua 5.4")
-check.eq(lib2.sent[#lib2.sent], "HELLO\t1\tlua\tLua 5.4\n", "HELLO reports the lua key source")
+check.eq(lib2.sent[#lib2.sent], "HELLO\t1\tlua\tLua 5.4\tsecret\n", "HELLO reports the lua key source and the token from the environment")
 M.shutdown()
 fake2.remove()
 
@@ -125,7 +125,7 @@ for _ = 1, 299 do M.poll() end
 check.eq(M.connected(), false, "no reconnect before 300 frames")
 M.poll()
 check.eq(M.connected(), true, "reconnects after 300 frames")
-check.eq(lib3.sent[#lib3.sent], "HELLO\t1\thelper\tLua 5.4\n", "and repeats HELLO")
+check.eq(lib3.sent[#lib3.sent], "HELLO\t1\thelper\tLua 5.4\t\n", "and repeats HELLO")
 lib3.sock.callbacks.error("gone")
 check.eq(M.connected(), false, "a socket error disconnects")
 M.shutdown()

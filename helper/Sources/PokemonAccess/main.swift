@@ -12,7 +12,7 @@ if options.noLaunch {
     let speech = SpeechRouter(preference: Preferences.shared.speechEngine, log: log)
     let sounds = SoundPlayer(root: AppPaths.luaRoot(override: options.luaRoot), gain: Preferences.shared.soundGain, log: log)
     let handler = MessageHandler(speech: speech, sounds: sounds, log: log)
-    let server = HelperServer(port: options.port ?? 0, log: log)
+    let server = HelperServer(port: options.port ?? 0, token: nil, log: log)
     server.onMessage = { message in
         handler.handle(message) { server.send($0) }
     }

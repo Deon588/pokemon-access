@@ -4,6 +4,9 @@ import PokemonAccessCore
 
 /// One connected Lua script: turns received bytes into protocol lines.
 final class ClientConnection {
+    /// Longest line accepted before the connection is dropped.
+    static let maxPendingBytes = 65536
+
     private let connection: NWConnection
     private var buffer = LineBuffer()
     var onLine: ((String) -> Void)?
@@ -32,6 +35,10 @@ final class ClientConnection {
             if let data, !data.isEmpty {
                 for line in self.buffer.feed(data) {
                     self.onLine?(line)
+                }
+                if self.buffer.pendingCount > Self.maxPendingBytes {
+                    self.connection.cancel()
+                    return
                 }
             }
             if isComplete || error != nil {

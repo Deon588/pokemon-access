@@ -18,7 +18,7 @@ final class MessageHandler {
 
     func handle(_ message: LuaMessage, reply: (HelperMessage) -> Void) {
         switch message {
-        case let .hello(protocolVersion, keySource, info):
+        case let .hello(protocolVersion, keySource, info, _):
             log.info("hello from script: protocol \(protocolVersion), keys from \(keySource.rawValue), \(info)")
             self.keySource = keySource
             reply(.welcome(version: AppVersion.current, keySource: keySource))
