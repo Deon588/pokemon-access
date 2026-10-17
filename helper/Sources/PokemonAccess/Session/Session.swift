@@ -61,15 +61,34 @@ final class Session {
         let launcher = MgbaLauncher(installation: installation, log: log)
         self.launcher = launcher
 
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: MgbaInstallation.bundleIdentifier).isEmpty {
+            throw SessionError.mgbaAlreadyRunning
+        }
+
         let locator = RomLocator(romsDirectory: AppPaths.romsDirectory, preferences: Preferences.shared)
-        guard let rom = locator.resolve(explicit: options.rom, opened: openedRom) else {
-            throw SessionError.romMissing
+        var rejected: Set<String> = []
+        var rom: URL
+        var header: RomHeader?
+        while true {
+            guard let candidate = locator.resolve(explicit: options.rom, opened: openedRom, rejected: rejected) else {
+                throw SessionError.romMissing
+            }
+            let (parsed, warning) = locator.describe(candidate)
+            if parsed == nil {
+                // Not a Game Boy ROM at all: say so and ask again instead of launching.
+                log.error("not a Game Boy ROM: \(candidate.path)")
+                say(warning ?? RomLocator.notARomWarning)
+                rejected.insert(candidate.path)
+                continue
+            }
+            if let warning {
+                say(warning)
+            }
+            rom = candidate
+            header = parsed
+            break
         }
-        let (header, warning) = locator.describe(rom)
         log.info("ROM \(rom.path): title \(header?.title ?? "?"), checksum \(String(format: "%04x", header?.globalChecksum ?? 0)), \(header?.knownGame?.displayName ?? "unknown game")")
-        if let warning {
-            say(warning)
-        }
 
         let luaRoot = AppPaths.luaRoot(override: options.luaRoot)
         let entry = luaRoot.appendingPathComponent("pokemon-access.lua")

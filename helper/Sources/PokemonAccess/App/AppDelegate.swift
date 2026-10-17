@@ -39,8 +39,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Closing the status window keeps the game running; Command Q quits.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
+    }
+
+    /// Reopening the application (Dock, Spotlight) brings the status window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        status?.present()
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {

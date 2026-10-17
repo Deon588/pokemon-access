@@ -4,6 +4,7 @@ import Foundation
 /// sentence the player hears.
 enum SessionError: LocalizedError {
     case mgbaMissing
+    case mgbaAlreadyRunning
     case romMissing
     case luaMissing(String)
     case accessibilityDenied
@@ -14,6 +15,8 @@ enum SessionError: LocalizedError {
         switch self {
         case .mgbaMissing:
             return "mGBA is not installed. Install it with Homebrew: brew install --cask mgba-app. Then open Pokemon Access again."
+        case .mgbaAlreadyRunning:
+            return "mGBA is already running. Quit it, then open Pokemon Access again."
         case .romMissing:
             return "No ROM chosen. Pokemon Access will quit."
         case let .luaMissing(path):

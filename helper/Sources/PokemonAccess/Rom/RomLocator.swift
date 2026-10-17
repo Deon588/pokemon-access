@@ -20,15 +20,20 @@ final class RomLocator {
     }
 
     /// `explicit` (the --rom option) is used as is; `opened` (a file opened with
-    /// the application) is used and remembered for next time.
-    func resolve(explicit: URL?, opened: URL?) -> URL? {
+    /// the application) is used and remembered for next time. Paths in
+    /// `rejected` (files that turned out not to be ROMs) are skipped, and once
+    /// anything was rejected the open panel is shown directly.
+    func resolve(explicit: URL?, opened: URL?, rejected: Set<String> = []) -> URL? {
         let files = FileManager.default
-        if let explicit, files.fileExists(atPath: explicit.path) {
+        if let explicit, files.fileExists(atPath: explicit.path), !rejected.contains(explicit.path) {
             return explicit
         }
-        if let opened, files.fileExists(atPath: opened.path) {
+        if let opened, files.fileExists(atPath: opened.path), !rejected.contains(opened.path) {
             remember(opened)
             return opened
+        }
+        if !rejected.isEmpty {
+            return openPanel()
         }
         if let remembered = preferences.romPath, files.fileExists(atPath: remembered) {
             return URL(fileURLWithPath: remembered)

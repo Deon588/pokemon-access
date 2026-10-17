@@ -22,6 +22,12 @@ public enum LuaMessage: Equatable {
             return value
         }
         func flag(_ index: Int) -> Bool { fields[index] == "1" }
+        // Upstream computes some values as floats; like the C API it targeted, truncate.
+        func number(_ index: Int) throws -> Int {
+            if let value = Int(fields[index]) { return value }
+            guard let value = Double(fields[index]), value.isFinite else { throw LuaMessageError.malformed(type) }
+            return Int(value)
+        }
 
         switch type {
         case "HELLO":
@@ -36,7 +42,7 @@ public enum LuaMessage: Equatable {
             return .silence
         case "SOUND":
             try need(6)
-            return .sound(id: try int(1), path: fields[2], loop: flag(3), pan: try int(4), volume: try int(5))
+            return .sound(id: try int(1), path: fields[2], loop: flag(3), pan: try number(4), volume: try number(5))
         case "SOUND_STOP":
             try need(2)
             return .soundStop(id: try int(1))

@@ -103,8 +103,11 @@ final class HelperServer {
         candidate.start(on: queue)
     }
 
+    /// Safe from any thread; the connection is touched on the server queue only.
     func send(_ message: HelperMessage) {
-        client?.send(message.line)
+        queue.async { [weak self] in
+            self?.client?.send(message.line)
+        }
     }
 
     func stop() {

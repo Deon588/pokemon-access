@@ -14,19 +14,18 @@ final class AVSpeech: SpeechEngine {
         self.rate = rate ?? AVSpeechUtteranceDefaultSpeechRate
     }
 
+    /// Called on the main thread by the router.
     func speak(_ text: String, interrupt: Bool) throws {
-        onMainThread {
-            if interrupt, synthesizer.isSpeaking {
-                synthesizer.stopSpeaking(at: .immediate)
-            }
-            let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = voice
-            utterance.rate = rate
-            synthesizer.speak(utterance)
+        if interrupt, synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
         }
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
+        utterance.rate = rate
+        synthesizer.speak(utterance)
     }
 
     func silence() {
-        onMainThread { synthesizer.stopSpeaking(at: .immediate) }
+        synthesizer.stopSpeaking(at: .immediate)
     }
 }

@@ -55,3 +55,12 @@ final class LuaMessageTokenTests: XCTestCase {
                        .hello(protocolVersion: 1, keySource: .lua, info: "Lua 5.4", token: nil))
     }
 }
+
+final class LuaMessageFractionTests: XCTestCase {
+    func testSoundAcceptsFractionalPanAndVolumeByTruncating() throws {
+        XCTAssertEqual(try LuaMessage.parse(["SOUND", "1", "/p.wav", "0", "-88.888888888889", "30.5"]),
+                       .sound(id: 1, path: "/p.wav", loop: false, pan: -88, volume: 30))
+        XCTAssertEqual(try LuaMessage.parse(["SOUND", "2", "/p.wav", "1", "100", "0"]),
+                       .sound(id: 2, path: "/p.wav", loop: true, pan: 100, volume: 0))
+    }
+}

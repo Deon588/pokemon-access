@@ -25,8 +25,9 @@ final class VoiceOverSpeech: SpeechEngine {
 
     /// VoiceOver's `output` offers no queue control; the Lua side already
     /// batches one utterance per frame so each command's text stays whole.
+    /// Must run on the main thread (NSAppleScript); the router guarantees it.
     func speak(_ text: String, interrupt: Bool) throws {
-        try onMainThread { try callSpeakText(text) }
+        try callSpeakText(text)
     }
 
     /// Nothing to do: the next output replaces the current one, and the

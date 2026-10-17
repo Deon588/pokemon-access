@@ -22,9 +22,10 @@ final class StatusWindowController {
         statusField.setAccessibilityLabel("Status")
         content.addSubview(statusField)
 
+        // A plain button on purpose: Return must not end the game session;
+        // Command Q quits, and closing this window only hides it.
         let quit = NSButton(title: "Quit", target: NSApp, action: #selector(NSApplication.terminate(_:)))
         quit.frame = NSRect(x: 370, y: 20, width: 90, height: 32)
-        quit.keyEquivalent = "\r"
         content.addSubview(quit)
         window.contentView = content
     }
@@ -33,8 +34,13 @@ final class StatusWindowController {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Updates the text and asks VoiceOver to announce it.
     func show(status: String) {
         statusField.stringValue = status
         NSAccessibility.post(element: statusField, notification: .valueChanged)
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+            .announcement: status,
+            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
     }
 }
