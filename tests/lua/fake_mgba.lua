@@ -36,25 +36,28 @@ function fake.install(opts)
 
   local emu = {}
   function emu:read8(addr) check_thread(); return byte(addr) end
-  function emu:read16(addr) return byte(addr) | (byte(addr + 1) << 8) end
+  function emu:read16(addr) check_thread(); return byte(addr) | (byte(addr + 1) << 8) end
   function emu:read32(addr)
+    check_thread()
     return byte(addr) | (byte(addr + 1) << 8) | (byte(addr + 2) << 16) | (byte(addr + 3) << 24)
   end
   function emu:readRange(addr, n)
+    check_thread()
     local chars = {}
     for i = 0, n - 1 do chars[#chars + 1] = string.char(byte(addr + i)) end
     return table.concat(chars)
   end
-  function emu:platform() return f.id end
+  function emu:platform() check_thread(); return f.id end
   emu.memory = { cart0 = {} }
-  function emu.memory.cart0:read8(offset) return f.rom:byte(offset + 1) or 0 end
+  function emu.memory.cart0:read8(offset) check_thread(); return f.rom:byte(offset + 1) or 0 end
   function emu.memory.cart0:read16(offset)
     return emu.memory.cart0:read8(offset) | (emu.memory.cart0:read8(offset + 1) << 8)
   end
-  function emu.memory.cart0:readRange(offset, n) return f.rom:sub(offset + 1, offset + n) end
+  function emu.memory.cart0:readRange(offset, n) check_thread(); return f.rom:sub(offset + 1, offset + n) end
   f.breakpoints_cleared = {}
   if opts.breakpoints then
     function emu:setBreakpoint(fn, addr)
+      check_thread()
       f.breakpoints_set[#f.breakpoints_set + 1] = addr
       return #f.breakpoints_set
     end

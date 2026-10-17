@@ -1,8 +1,9 @@
 -- Drives upstream pokemon.lua as a coroutine, one resume per emulated frame.
 -- Upstream's `while true do emu.frameadvance() main_loop() end` keeps working
--- because compat maps emu.frameadvance to coroutine.yield. Errors in upstream
--- code are logged and spoken once; the emulator keeps running and a reset
--- (or a new ROM) starts the program again.
+-- because compat maps emu.frameadvance to coroutine.yield. An error in upstream
+-- code is logged and spoken; the emulator keeps running and the program is
+-- started again a few seconds later (see Runner.new for the limits), and an
+-- emulator reset or a new ROM always starts it again.
 local Runner = {}
 Runner.__index = Runner
 

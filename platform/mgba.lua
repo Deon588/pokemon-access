@@ -286,7 +286,7 @@ end
 function M.send_hello(info)
   M.hello_info = info
   if M.connected() then
-    M.link:send({ "HELLO", M.PROTOCOL_VERSION, M.key_source, info, M.token or "" })
+    M.call(raw_send, { "HELLO", M.PROTOCOL_VERSION, M.key_source, info, M.token or "" })
   end
 end
 
