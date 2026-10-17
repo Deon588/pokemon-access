@@ -23,7 +23,7 @@ if options.noLaunch {
     // Development mode: speak and serve the protocol without launching mGBA.
     let speech = SpeechRouter(preference: Preferences.shared.speechEngine, log: log)
     let sounds = SoundPlayer(root: AppPaths.luaRoot(override: options.luaRoot), gain: Preferences.shared.soundGain, log: log)
-    let handler = MessageHandler(speech: speech, sounds: sounds, log: log)
+    let handler = MessageHandler(speech: speech, sounds: sounds, prompts: PromptPresenter(log: log), log: log)
     let server = HelperServer(port: options.port ?? 0, token: nil, log: log)
     server.onMessage = { message in
         handler.handle(message) { server.send($0) }

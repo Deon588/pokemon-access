@@ -1,22 +1,24 @@
 import Foundation
 import PokemonAccessCore
 
-/// Routes messages from the Lua side to speech, sounds and the log; a later
-/// task adds prompts.
+/// Routes messages from the Lua side to speech, sounds, prompts and the log.
+/// Called on the server queue; prompts hop to the main thread and reply later.
 final class MessageHandler {
     private let speech: SpeechEngine
     private let sounds: SoundPlayer
+    private let prompts: PromptPresenter
     private let log: FileLog
     private(set) var keySource: KeySource = .helper
     var onHello: ((KeySource) -> Void)?
 
-    init(speech: SpeechEngine, sounds: SoundPlayer, log: FileLog) {
+    init(speech: SpeechEngine, sounds: SoundPlayer, prompts: PromptPresenter, log: FileLog) {
         self.speech = speech
         self.sounds = sounds
+        self.prompts = prompts
         self.log = log
     }
 
-    func handle(_ message: LuaMessage, reply: (HelperMessage) -> Void) {
+    func handle(_ message: LuaMessage, reply: @escaping (HelperMessage) -> Void) {
         switch message {
         case let .hello(protocolVersion, keySource, info, _):
             log.info("hello from script: protocol \(protocolVersion), keys from \(keySource.rawValue), \(info)")
@@ -42,8 +44,14 @@ final class MessageHandler {
             sounds.setPitch(id: id, value: value)
         case let .log(level, text):
             log.info("lua \(level): \(text)")
-        default:
-            log.info("unhandled message: \(message)")
+        case let .promptText(id, title, caption, defaultValue):
+            DispatchQueue.main.async { [prompts] in
+                prompts.text(id: id, title: title, caption: caption, defaultValue: defaultValue, reply: reply)
+            }
+        case let .promptChoice(id, title, caption, multi, defaults, items):
+            DispatchQueue.main.async { [prompts] in
+                prompts.choice(id: id, title: title, caption: caption, multi: multi, defaults: defaults, items: items, reply: reply)
+            }
         }
     }
 }

@@ -95,7 +95,7 @@ final class Session {
         let token = HandshakeGate.makeToken()
         let server = HelperServer(port: options.port ?? 0, token: token, log: log)
         let sounds = SoundPlayer(root: luaRoot, gain: Preferences.shared.soundGain, log: log)
-        let handler = MessageHandler(speech: speech, sounds: sounds, log: log)
+        let handler = MessageHandler(speech: speech, sounds: sounds, prompts: PromptPresenter(log: log), log: log)
         handler.onHello = { [weak self] keySource in
             Task { @MainActor in self?.scriptSaidHello(keySource: keySource) }
         }
@@ -185,6 +185,7 @@ final class Session {
     private func say(_ text: String) {
         do {
             try speech.speak(text, interrupt: false)
+            log.info("speak via \(speech.name): \(text)")
         } catch {
             log.error("could not speak: \(error)")
         }
