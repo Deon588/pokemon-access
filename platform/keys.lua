@@ -1,6 +1,10 @@
 -- Tracks which hotkey names are held, in the spelling upstream's `commands`
 -- table uses: uppercase letters and digits, lowercase "shift". Fed either by
 -- chords from the helper app ("shift+H") or by raw mGBA 0.11 key events.
+--
+-- Upstream reads the keys once per frame. A press and release that both
+-- arrive between two reads would otherwise be invisible, so names pressed
+-- since the last held() call are reported once even if already released.
 local Keys = {}
 Keys.__index = Keys
 
@@ -14,7 +18,7 @@ local SHIFTED_DIGITS = {
 local STATE_UP, STATE_DOWN = 0, 1
 
 function Keys.new()
-  return setmetatable({ down = {} }, Keys)
+  return setmetatable({ down = {}, recent = {} }, Keys)
 end
 
 local function chord_names(chord)
@@ -28,6 +32,7 @@ end
 function Keys:press(chord)
   for _, name in ipairs(chord_names(chord)) do
     self.down[name] = true
+    self.recent[name] = true
   end
 end
 
@@ -58,24 +63,32 @@ function Keys:raw(key, state, modifiers)
   end
   if state == STATE_DOWN then
     self.down[name] = true
+    self.recent[name] = true
     if modifiers ~= nil and modifiers & SHIFT_MODIFIERS ~= 0 then
       self.down.shift = true
+      self.recent.shift = true
     end
   elseif state == STATE_UP then
     self.down[name] = nil
   end
 end
 
+-- Names held now plus names pressed since the previous call.
 function Keys:held()
-  local copy = {}
+  local snapshot = {}
   for name in pairs(self.down) do
-    copy[name] = true
+    snapshot[name] = true
   end
-  return copy
+  for name in pairs(self.recent) do
+    snapshot[name] = true
+  end
+  self.recent = {}
+  return snapshot
 end
 
 function Keys:clear()
   self.down = {}
+  self.recent = {}
 end
 
 return Keys
