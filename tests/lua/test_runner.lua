@@ -83,10 +83,59 @@ check.eq(answer, 42, "the request's result is passed back to the program")
 check.eq(serviced_on_main, 1, "and the request ran on the main thread")
 check.truthy(requester.alive, "servicing a request keeps the program alive")
 
+-- after an error the program restarts by itself a few seconds later, but a
+-- program that keeps failing is stopped instead of restarting forever
+local crashes = 0
+local crashing = Runner.new(fake, api, function()
+  crashes = crashes + 1
+  error("always")
+end)
+crashing.restart_delay_frames = 3
+crashing.max_restarts = 2
+crashing:frame()
+check.eq(crashes, 1, "the program ran and failed")
+check.eq(crashing.alive, false, "it is dead after the error")
+crashing:frame()
+crashing:frame()
+check.eq(crashes, 1, "no restart before the delay")
+crashing:frame()
+check.eq(crashes, 2, "restarted after the delay")
+for _ = 1, 3 do crashing:frame() end
+check.eq(crashes, 3, "restarted a second time")
+for _ = 1, 10 do crashing:frame() end
+check.eq(crashes, 3, "no third restart: the limit is reached")
+check.eq(count_speak("Pokemon Access stopped after repeated script errors. Reset the game to try again."), 1, "the player is told once")
+crashing:reset()
+crashing:frame()
+check.eq(crashes, 4, "a reset starts it again anyway")
+
+local recovered_frames = 0
+local recovering = Runner.new(fake, api, function()
+  recovered_frames = 0
+  while true do
+    emu.frameadvance()
+    recovered_frames = recovered_frames + 1
+    if recovered_frames == 1 and not _G.already_failed_once then
+      _G.already_failed_once = true
+      error("once")
+    end
+  end
+end)
+recovering.restart_delay_frames = 2
+recovering:frame()
+check.eq(recovering.alive, false, "the first run fails once")
+recovering:frame()
+recovering:frame()
+check.eq(recovering.alive, true, "and the program is running again")
+for _ = 1, 3 do recovering:frame() end
+check.eq(recovered_frames, 4, "the restarted program keeps running")
+
 -- a program that returns is finished, not an error
 local finished = Runner.new(fake, api, function() end)
-local before = #fake.calls
+local errors_before = count_speak("Pokemon Access script error. See the log.")
 finished:frame()
 check.eq(finished.alive, false, "a program that returns is no longer alive")
-check.eq(count_speak("Pokemon Access script error. See the log."), 1, "and that is not an error")
+check.eq(count_speak("Pokemon Access script error. See the log."), errors_before, "and that is not an error")
+for _ = 1, 200 do finished:frame() end
+check.eq(finished.alive, false, "and it is not restarted either")
 check.done()
