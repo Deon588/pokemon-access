@@ -78,8 +78,9 @@ Pokémon Access keys, taken while mGBA is the frontmost window:
 
 VoiceOver notes: turn Quick Nav off while playing (press the left and right
 arrows together), or single letters go to VoiceOver instead of the game. Press
-Control to stop speech at any time. Command Tab to Pokemon Access reads the
-status window.
+Control to stop speech at any time. Each new announcement replaces the one
+still being spoken, as VoiceOver's own announcements do. Command Tab to Pokemon
+Access reads the status window.
 
 ## Settings
 
