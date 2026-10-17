@@ -17,6 +17,8 @@ if options.probeMgba {
     exit(0)
 }
 
+let app = NSApplication.shared
+
 if options.noLaunch {
     // Development mode: speak and serve the protocol without launching mGBA.
     let speech = SpeechRouter(preference: Preferences.shared.speechEngine, log: log)
@@ -39,9 +41,11 @@ if options.noLaunch {
     if let quitAfter = options.quitAfter {
         DispatchQueue.main.asyncAfter(deadline: .now() + quitAfter) { exit(0) }
     }
-    let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     app.run()
 } else {
-    print("PokemonAccess \(AppVersion.current): the launcher arrives in a later task; use --no-launch for now")
+    let delegate = AppDelegate(options: options, log: log)
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    app.run()
 }
