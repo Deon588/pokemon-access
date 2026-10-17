@@ -75,6 +75,8 @@ function fake.new(opts)
     return f.breakpoints
   end
   function f.log(text) f.logs[#f.logs + 1] = text end
+  function f.poll() record("poll") end
+  function f.end_frame() record("end_frame") end
 
   return f
 end
