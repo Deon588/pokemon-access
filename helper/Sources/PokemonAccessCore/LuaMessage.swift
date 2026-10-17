@@ -22,11 +22,15 @@ public enum LuaMessage: Equatable {
             return value
         }
         func flag(_ index: Int) -> Bool { fields[index] == "1" }
-        // Upstream computes some values as floats; like the C API it targeted, truncate.
+        // Upstream computes some values as floats; like the C API it targeted,
+        // truncate. Values outside Int are malformed rather than a trap.
         func number(_ index: Int) throws -> Int {
             if let value = Int(fields[index]) { return value }
-            guard let value = Double(fields[index]), value.isFinite else { throw LuaMessageError.malformed(type) }
-            return Int(value)
+            guard let value = Double(fields[index]), value.isFinite,
+                  let integer = Int(exactly: value.rounded(.towardZero)) else {
+                throw LuaMessageError.malformed(type)
+            }
+            return integer
         }
 
         switch type {

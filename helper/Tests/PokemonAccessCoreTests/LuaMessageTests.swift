@@ -64,3 +64,13 @@ final class LuaMessageFractionTests: XCTestCase {
                        .sound(id: 2, path: "/p.wav", loop: true, pan: 100, volume: 0))
     }
 }
+
+final class LuaMessageRangeTests: XCTestCase {
+    func testOutOfRangeNumbersAreMalformedInsteadOfTrapping() {
+        for text in ["1e300", "-1e300", "nan", "inf", "99999999999999999999"] {
+            XCTAssertThrowsError(try LuaMessage.parse(["SOUND", "1", "/p.wav", "0", text, "0"]), text) { error in
+                XCTAssertEqual(error as? LuaMessageError, .malformed("SOUND"))
+            }
+        }
+    }
+}
