@@ -7,6 +7,16 @@ let log = FileLog.shared
 log.start(at: AppPaths.logFile)
 log.info("Pokemon Access \(AppVersion.current) starting: \(CommandLine.arguments.dropFirst().joined(separator: " "))")
 
+if options.probeMgba {
+    if let installation = MgbaInstallation.find(override: options.mgbaApp) {
+        let launcher = MgbaLauncher(installation: installation, log: log)
+        print("found \(installation.bundleURL.path) version \(installation.version) script option: \(launcher.supportsScriptOption())")
+    } else {
+        print("mGBA not found")
+    }
+    exit(0)
+}
+
 if options.noLaunch {
     // Development mode: speak and serve the protocol without launching mGBA.
     let speech = SpeechRouter(preference: Preferences.shared.speechEngine, log: log)
