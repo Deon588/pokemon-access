@@ -499,10 +499,18 @@ both the installed mGBA 0.10.5 (Scripting-window loading through Accessibility) 
 the 0.11 build (`--script`). Carbon hot keys were verified live (T, shift+H,
 shift+0 arrive as `KEY` messages). Steps 2 to 9 ran on the installed mGBA 0.10.5
 against the header-only Red ROM (section 6.7) through the fake helper, every
-hotkey producing upstream's expected speech, sounds or prompt on blank data; only
-text reading (step 2) and the real map, object and battle values wait for the
-player's ROM (`docs/game-checklist.md`). Step 9's prompt was also driven through
-Accessibility in development mode.
+hotkey producing upstream's expected speech, sounds or prompt on blank data.
+
+Later the same day the player ran the installed application with their own
+Pokémon Red ROM for eleven minutes (211 spoken lines, 210 sound cues, no error in
+the log): the title menu and Oak's introduction were read as they appeared, the
+name menus and the on-screen keyboard were read letter by letter, the house, Pallet
+Town and Oak's Lab objects were listed with distances, facing and warps ("Mom: 3 Up
+2 Right; Facing Left", "North connection, Route 1"), NPC dialogue was read without
+a key press, and footsteps, the menu cursor and camera moves played their cues.
+Steps 1 to 4, 7 and 8 are therefore verified in real play; pathfinding (5), battle
+HP (6) and the rename prompt (9) are verified on blank data and still await a real
+play check (`docs/game-checklist.md`).
 
 Found on the way: mGBA 0.10.5 rejects emu, console and socket calls made from a
 coroutine ("Function called from invalid context"); 0.11 accepts them. The platform

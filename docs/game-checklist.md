@@ -1,5 +1,9 @@
 # Game checklist (needs a Pokémon Red or Blue ROM)
 
+Status 2026-10-17: steps 1, 2, 3, 4, 7 and 8 were confirmed from the log of the
+player's own session with Pokémon Red on mGBA 0.10.5; steps 5, 6 and 9 remain to
+be confirmed in real play (they passed on blank map data).
+
 Run this once a ROM is in `~/Library/Application Support/Pokemon Access/ROMs`.
 Each line names a PORTING.md section 7 step, what to do, and what the log
 (`~/Library/Logs/Pokemon Access/pokemon-access.log`) must show. "speak via"
