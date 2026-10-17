@@ -47,6 +47,10 @@ tell application "System Events"
 	delay 0.2
 	keystroke "j"
 	delay 0.2
+	keystroke "5"
+	delay 0.2
+	keystroke "0" using shift down
+	delay 0.2
 	key down "x"
 	delay 0.4
 	key up "x"
