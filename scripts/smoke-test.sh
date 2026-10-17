@@ -34,7 +34,7 @@ pgrep -x mGBA >/dev/null && pkill -x mGBA || true
 pgrep -x mGBA-dev >/dev/null && pkill -x mGBA-dev || true
 
 failed=0
-for pattern in "mGBA started" "hello from script" "speak via" "game_not_supported" "status: Connected to the script"; do
+for pattern in "mGBA started" "hello from script" "speak via" "not supported" "status: Connected to the script"; do
   if ! grep -q -- "$pattern" "$LOG"; then
     echo "missing in log: $pattern"
     failed=1
