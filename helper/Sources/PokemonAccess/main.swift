@@ -18,6 +18,14 @@ if options.noLaunch {
     }
     let port = try server.start()
     print("listening on \(port)")
+    var hotkeys: HotkeyMonitor?
+    if options.hotkeysAlways {
+        hotkeys = HotkeyMonitor(chords: HotkeyTable.all, layout: KeyboardLayout.current(), log: log) { chord, down in
+            log.info("KEY \(down ? "DOWN" : "UP") \(chord.name)")
+            server.send(.key(down: down, chord: chord.name))
+        }
+        try hotkeys?.enable()
+    }
     if let quitAfter = options.quitAfter {
         DispatchQueue.main.asyncAfter(deadline: .now() + quitAfter) { exit(0) }
     }
