@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Per-user files the scripts write next to themselves
+names_*.lua
+hacks.lua
+
+# Probe tooling: generated per run
+tools/mgba-probe/probe_config.lua
+*.gb
+*.gbc
+*.gba
+*.sav
+*.ss?
