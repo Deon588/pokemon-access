@@ -251,7 +251,7 @@ Verified sequence through the Accessibility API (`load_script.applescript`):
 
 The native file dialog (`File > Load script...`) was not reliable to drive and is not
 needed. A Swift launcher can do the same steps with `AXUIElement` calls; it requires
-the Accessibility permission that the hotkey capture needs anyway.
+the Accessibility permission (the hot keys themselves need none).
 
 ## 5. macOS findings for speech, sound, dialogs and input
 
@@ -263,7 +263,7 @@ the Accessibility permission that the hotkey capture needs anyway.
 | VoiceOver voice settings | Not readable from `com.apple.VoiceOver4/default.plist` with `plutil` (no voice or rate keys found), so "use VoiceOver's voice" is best achieved by routing speech through VoiceOver itself (above) rather than copying its settings into AVSpeechSynthesizer. |
 | Sound cues | mGBA's Lua has no audio API on either version. The helper can preload the 33 WAV files (1.7 MB, 17 of them used on the Red/Blue path) into `AVAudioPlayer` instances, which expose `pan` (-1..1) and `volume` (0..1), matching `audio.play`'s pan -100..100 and volume 0..100. `/usr/bin/afplay` exists for a fallback without pan. |
 | Dialogs | `NSAlert` with an accessory text field or a pop-up list is standard Cocoa and reads correctly in VoiceOver. AppleScript `display dialog` and `choose from list` would also work but block the emulator thread if called from Lua. |
-| Accessibility permission | This session's parent app already has it (`AXIsProcessTrusted` true), which is why the probe could drive mGBA. A standalone helper app needs its own grant: `AXIsProcessTrustedWithOptions` with the prompt option opens the right System Settings pane. The permission covers both the `CGEventTap` hotkey capture and the AX-driven script loading. |
+| Accessibility permission | This session's parent app already has it (`AXIsProcessTrusted` true), which is why the probe could drive mGBA. A standalone helper app needs its own grant: `AXIsProcessTrustedWithOptions` with the prompt option opens the right System Settings pane. Only the AX-driven script loading needs the grant: Carbon hot keys (`RegisterEventHotKey`) are delivered to the registering process without any permission. |
 | Native toolchain | Swift 6.4 (`swiftc` and SwiftPM) with Xcode installed; Python 3.14 and Homebrew available. No Rosetta involved anywhere. |
 
 ## 6. Proposed architecture
@@ -277,7 +277,7 @@ the Accessibility permission that the hotkey capture needs anyway.
 |   platform/mgba.lua          |  helper is the server       |          or VoiceOver output   |
 |   compat/vba-api.lua         |                             |  sounds: AVAudioPlayer         |
 |   upstream: pokemon.lua,     |  Lua -> helper: SPEAK,      |  dialogs: NSAlert              |
-|     gb.lua, game/**, a-star  |    SILENCE, SOUND, PROMPT_* |  hotkeys: CGEventTap           |
+|     gb.lua, game/**, a-star  |    SILENCE, SOUND, PROMPT_* |  hotkeys: Carbon hot keys      |
 |     (unchanged)              |  helper -> Lua: KEY, REPLY  |  launcher: starts mGBA, loads  |
 +------------------------------+                             |    the script, speaks errors   |
                                                              +--------------------------------+
@@ -316,9 +316,10 @@ the Accessibility permission that the hotkey capture needs anyway.
      call because that route has no queue control.
    - sound engine: preloads `sounds/**` relative to the repository, plays with pan
      and volume.
-   - hotkeys: a `CGEventTap` active only while the frontmost app is
-     `com.endrift.mgba-qt`; converts key codes to upstream names, swallows mapped
-     hotkeys, sends `KEY DOWN|UP`.
+   - hotkeys: Carbon `RegisterEventHotKey` registrations, made while the frontmost
+     app is `com.endrift.mgba-qt` and removed when it is not; one registration per
+     upstream command (letter alone, letter with shift, shift+0), key codes looked
+     up in the current keyboard layout; sends `KEY DOWN|UP`. Needs no permission.
    - dialogs: text and list prompts as `NSAlert` on the main thread; replies by id.
    - launcher: `pokemon-access <rom>`; checks mGBA is installed (speaks the brew
      command if not), writes a private mGBA config (FPS in title bar off, volume
@@ -350,7 +351,7 @@ the emulator keeps running.
 
 ### 6.3 Two input modes, one code path
 
-- Mode A, mGBA 0.10.5 (what Homebrew installs): keys come from the helper's event tap;
+- Mode A, mGBA 0.10.5 (what Homebrew installs): keys come from the helper's hot keys;
   script loading is done by the helper through the Accessibility API; the helper
   needs the Accessibility permission.
 - Mode B, mGBA 0.11: keys come from `callbacks:add("key")` in Lua; the launcher passes
@@ -396,7 +397,7 @@ local table, and `unpack = unpack or table.unpack`.
 | Risk | Mitigation |
 |------|------------|
 | Driving mGBA's Qt UI through Accessibility breaks with an mGBA update | Only needed for Mode A; the sequence is three steps and already encapsulated; Mode B removes it |
-| CGEventTap and Accessibility permission confuse first-time users | Spoken onboarding; permission state checked on every start |
+| The Accessibility permission confuses first-time users | Spoken onboarding; permission state checked on every start; hot keys work without it |
 | 0.11 is a moving target | Nothing in the design depends on 0.11; its features are detected at runtime |
 | Lua 5.4 integer/float semantics expose latent upstream bugs | Run every hotkey against the real ROM in Phase 3; keep a list of any `//` or `math.floor` fixes to propose upstream |
 | Locale decimal comma | Set the numeric locale to C in the entry script |
@@ -423,27 +424,34 @@ local table, and `unpack = unpack or table.unpack`.
    the yield-until-reply shim. Hack ROM setup (shift+0, list prompts plus directory
    listing) stays out until a later phase; see decision 6.
 
-## 8. Decisions needed before Phase 2
+## 8. Decisions taken before Phase 2
 
-1. mGBA version strategy: build Mode A for the stable 0.10.5 with Mode B as a runtime
-   extra (recommended), or target 0.11 development builds only (simpler, no
-   Accessibility permission, but nightly builds until 0.11 is released).
-2. Default speech engine: AVSpeechSynthesizer with a configurable voice and rate
-   (recommended for latency and control), or VoiceOver passthrough so the player hears
-   their own VoiceOver voice. Both will be available; the question is the default.
-3. Keep upstream files byte-identical through shims (recommended), or allow the small
-   upstream patches listed in 6.4 right away.
-4. Launcher shape for the first release: a Terminal command `pokemon-access <rom>`
-   (recommended for Phase 3), or an application bundle from the start.
-5. The path to your Pokémon Red or Blue ROM for Phase 3 testing. Nothing in Phase 1
-   needed it; the probe used a generated test ROM.
-6. Dialog-driven commands in the first release. Shift+K and shift+M (rename) need the
-   text prompt; shift+0 (hack ROM setup) needs four or five list prompts plus
-   directory listing, which mGBA's Lua cannot do by itself. Recommendation: rename
-   prompts as Phase 3 step 9, hack ROM setup deferred. English Red and Blue are
-   recognised by header checksums 0x91e6 and 0x9d0a (`gb.lua:13,19`), so a standard
-   dump needs no setup; any other dump would currently be reported as unsupported.
-7. Who installs the first release. This Mac only, built from source (recommended for
-   Phase 3), or other players, which adds a stable signing identity, notarization, a
-   prebuilt download and a minimum macOS version to test. Everything so far ran on
-   macOS 27.0.1 with Swift 6.4.
+Resolved on 2026-10-17. The questions are kept as they were asked; the answer
+follows each one.
+
+1. mGBA version strategy. Decision: build Mode A for the stable 0.10.5, with Mode B
+   (`--script`, Lua key events) detected at runtime when a 0.11 build is used.
+2. Default speech engine. Decision: VoiceOver passthrough when VoiceOver is running,
+   so the player hears their own voice and rate; AVSpeechSynthesizer when it is not;
+   `say` only if both fail.
+3. Upstream edits. Decision: patches to upstream files are allowed where a shim would
+   be fragile or where Lua 5.4 exposes a real bug. Each one stays small, is listed in
+   this file and is proposed upstream.
+4. Launcher shape. Decision: an application bundle from the start (`Pokemon
+   Access.app`), built from source with SwiftPM and a bundling script, installed to
+   `~/Applications`.
+5. ROM path. Decision delegated to the port: the app looks in `~/Library/Application
+   Support/Pokemon Access/ROMs/`, remembers a ROM chosen through the standard open
+   panel, and accepts a ROM dropped on its icon. Nothing downloads a ROM.
+6. Dialog-driven commands. Decision: rename prompts (shift+K, shift+M) as the last
+   Phase 3 step; hack ROM setup (shift+0) deferred.
+7. Distribution. Decision: this Mac only, built from source, ad hoc signature with a
+   stable designated requirement. Notarization and a minimum macOS version are out of
+   scope until the port is proven.
+
+One refinement to section 6 follows from decision 1: hotkeys on 0.10.5 are taken
+with Carbon `RegisterEventHotKey` instead of a `CGEventTap`. Registered hot keys need
+no Accessibility permission, the system swallows them before mGBA sees them, and they
+are registered only while mGBA is the frontmost application. The Accessibility grant
+is then needed for one thing only: loading the script into the 0.10.5 Scripting
+window.
