@@ -10,6 +10,10 @@ function fake.new()
     end
     local sock = { callbacks = {}, closed = false, host = host, port = port }
     function sock:send(data)
+      local _, is_main = coroutine.running()
+      if not is_main then
+        lib.coroutine_sends = (lib.coroutine_sends or 0) + 1
+      end
       lib.sent[#lib.sent + 1] = data
       return #data
     end

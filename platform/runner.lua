@@ -23,11 +23,18 @@ function Runner.new(platform, api, chunk)
   }, Runner)
 end
 
+-- Resumes the program until it yields for the next frame. A yield that is a
+-- platform request (an emulator call that must run on the main thread, see
+-- platform/mgba.lua) is serviced here and the program continues at once.
 function Runner:resume()
   if not self.alive then
     return
   end
   local ok, err = coroutine.resume(self.co)
+  local platform = self.platform
+  while ok and platform.is_request ~= nil and platform.is_request(err) do
+    ok, err = coroutine.resume(self.co, platform.service(err))
+  end
   if not ok then
     self.alive = false
     self.platform.log("script error: " .. tostring(err) .. "\n" .. debug.traceback(self.co))

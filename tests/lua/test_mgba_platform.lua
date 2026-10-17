@@ -130,4 +130,34 @@ lib3.sock.callbacks.error("gone")
 check.eq(M.connected(), false, "a socket error disconnects")
 M.shutdown()
 fake3.remove()
+
+-- mGBA 0.10.5 rejects API calls made from a coroutine ("Function called from
+-- invalid context"), so calls made inside the program coroutine must be
+-- handed to the main thread through yielded requests the runner services.
+local lib4 = fake_socket.new()
+local fake4 = fake_mgba.install{ bus = { [0xC000] = 0x42 }, env = { POKEMON_ACCESS_PORT = "48890" }, socket = lib4, main_thread_only = true }
+M.setup{}
+check.eq(M.read8(0xC000), 0x42, "a direct call from the main thread still works")
+local program = coroutine.create(function()
+  local value = M.read8(0xC000)
+  M.log("from inside")
+  M.play_sound("/p.wav", false, 0, 50)
+  return value
+end)
+local ok, yielded = coroutine.resume(program)
+check.truthy(ok, "the coroutine runs")
+check.truthy(M.is_request(yielded), "an emulator call inside the coroutine yields a request")
+local serviced = 0
+while ok and M.is_request(yielded) do
+  serviced = serviced + 1
+  ok, yielded = coroutine.resume(program, M.service(yielded))
+end
+check.truthy(ok, "the coroutine finishes")
+check.eq(yielded, 0x42, "the read value comes back through the request")
+check.eq(serviced, 3, "the read, the log and the sound each went through the main thread")
+check.eq(fake4.main_thread_violations, 0, "no mGBA API was touched from the coroutine")
+check.eq(lib4.sent[#lib4.sent], "SOUND\t1\t/p.wav\t0\t0\t50\n", "the sound message was sent")
+check.eq(fake4.logs[#fake4.logs], "from inside", "the log line was written")
+M.shutdown()
+fake4.remove()
 check.done()

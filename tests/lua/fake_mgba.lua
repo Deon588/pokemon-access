@@ -24,8 +24,18 @@ function fake.install(opts)
 
   local function byte(addr) return f.bus[addr] or 0 end
 
+  -- With main_thread_only, count API calls made from inside a coroutine, which
+  -- mGBA 0.10.5 rejects.
+  f.main_thread_violations = 0
+  local function check_thread()
+    local _, is_main = coroutine.running()
+    if opts.main_thread_only and not is_main then
+      f.main_thread_violations = f.main_thread_violations + 1
+    end
+  end
+
   local emu = {}
-  function emu:read8(addr) return byte(addr) end
+  function emu:read8(addr) check_thread(); return byte(addr) end
   function emu:read16(addr) return byte(addr) | (byte(addr + 1) << 8) end
   function emu:read32(addr)
     return byte(addr) | (byte(addr + 1) << 8) | (byte(addr + 2) << 16) | (byte(addr + 3) << 24)
@@ -67,7 +77,7 @@ function fake.install(opts)
   end
 
   local console = {}
-  function console:log(text) f.logs[#f.logs + 1] = text end
+  function console:log(text) check_thread(); f.logs[#f.logs + 1] = text end
 
   _G.emu = emu
   _G.callbacks = callbacks

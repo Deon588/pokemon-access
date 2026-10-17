@@ -6,6 +6,12 @@
 -- setup() captures mGBA's globals (emu, callbacks, console, socket, input)
 -- because compat.install() afterwards replaces `emu` and `input` with the
 -- tables upstream expects.
+--
+-- mGBA 0.10.5 binds its API to the main Lua thread: emu, console and socket
+-- methods called from a coroutine fail with "Function called from invalid
+-- context" (0.11 accepts them). Upstream runs inside the runner's coroutine,
+-- so every such call goes through M.call, which yields a request that the
+-- runner services on the main thread (platform/runner.lua).
 local Link = require("platform.helper_link")
 local Speech = require("platform.speech")
 local Keys = require("platform.keys")
@@ -29,41 +35,87 @@ function M.connected()
   return M.link ~= nil and M.link.connected
 end
 
-function M.log(text)
-  text = tostring(text)
+-- Main-thread trampoline ----------------------------------------------------
+
+local REQUEST = {}
+
+-- Calls fn(...) on the main Lua thread: directly when already there, otherwise
+-- by yielding a request for the runner to service.
+function M.call(fn, ...)
+  local _, on_main = coroutine.running()
+  if on_main then
+    return fn(...)
+  end
+  local results = coroutine.yield({ [REQUEST] = true, fn = fn, args = table.pack(...) })
+  if not results[1] then
+    error(results[2], 0)
+  end
+  return table.unpack(results, 2, results.n)
+end
+
+function M.is_request(value)
+  return type(value) == "table" and value[REQUEST] == true
+end
+
+-- Runs a yielded request; the packed results go back into the coroutine.
+function M.service(request)
+  return table.pack(pcall(request.fn, table.unpack(request.args, 1, request.args.n)))
+end
+
+local function raw_send(fields)
+  if M.link ~= nil and M.link.connected then
+    return M.link:send(fields)
+  end
+  return false
+end
+
+local function raw_log(text)
   if M.runtime ~= nil and M.runtime.console ~= nil then
     M.runtime.console:log(text)
   end
-  if M.connected() then
-    M.link:send({ "LOG", "info", text })
-  end
+  raw_send({ "LOG", "info", text })
+end
+
+function M.log(text)
+  M.call(raw_log, tostring(text))
 end
 
 -- Memory ----------------------------------------------------------------
 
-function M.read8(addr) return M.runtime.emu:read8(addr) end
-function M.read16(addr) return M.runtime.emu:read16(addr) end
-function M.read32(addr) return M.runtime.emu:read32(addr) end
+local function raw_read8(addr) return M.runtime.emu:read8(addr) end
+local function raw_read16(addr) return M.runtime.emu:read16(addr) end
+local function raw_read32(addr) return M.runtime.emu:read32(addr) end
+local function raw_read_range(addr, count) return M.runtime.emu:readRange(addr, count) end
+-- Linear ROM offsets, independent of the mapped bank (verified in Phase 1).
+local function raw_rom_read8(offset) return M.runtime.emu.memory.cart0:read8(offset) end
+local function raw_rom_read16(offset) return M.runtime.emu.memory.cart0:read16(offset) end
+local function raw_platform_id() return M.runtime.emu:platform() end
+
+function M.read8(addr) return M.call(raw_read8, addr) end
+function M.read16(addr) return M.call(raw_read16, addr) end
+function M.read32(addr) return M.call(raw_read32, addr) end
 
 function M.read_range(addr, count)
-  local bytes = M.runtime.emu:readRange(addr, count)
+  local bytes = M.call(raw_read_range, addr, count)
   return { bytes:byte(1, -1) }
 end
 
--- Linear ROM offsets, independent of the mapped bank (verified in Phase 1).
-function M.rom_read8(offset) return M.runtime.emu.memory.cart0:read8(offset) end
-function M.rom_read16(offset) return M.runtime.emu.memory.cart0:read16(offset) end
-
-function M.platform_id() return M.runtime.emu:platform() end
+function M.rom_read8(offset) return M.call(raw_rom_read8, offset) end
+function M.rom_read16(offset) return M.call(raw_rom_read16, offset) end
+function M.platform_id() return M.call(raw_platform_id) end
 
 -- 0.11 only; returns false on 0.10.5 so the caller can poll instead.
-function M.set_breakpoint(addr, fn)
+local function raw_set_breakpoint(addr, fn)
   local emu = M.runtime.emu
   if emu.setBreakpoint == nil then
     return false
   end
   local ok = pcall(function() emu:setBreakpoint(fn, addr) end)
   return ok
+end
+
+function M.set_breakpoint(addr, fn)
+  return M.call(raw_set_breakpoint, addr, fn)
 end
 
 -- Callbacks ---------------------------------------------------------------
@@ -94,9 +146,9 @@ end
 local function send_speech(interrupt, text)
   if M.connected() then
     if text == "" then
-      M.link:send({ "SILENCE" })
+      M.call(raw_send, { "SILENCE" })
     else
-      M.link:send({ "SPEAK", interrupt and 1 or 0, text })
+      M.call(raw_send, { "SPEAK", interrupt and 1 or 0, text })
     end
     return
   end
@@ -116,7 +168,7 @@ function M.play_sound(path, loop, pan, vol)
   M.next_sound_id = M.next_sound_id + 1
   local id = M.next_sound_id
   if M.connected() then
-    M.link:send({ "SOUND", id, path, loop and 1 or 0, pan, vol })
+    M.call(raw_send, { "SOUND", id, path, loop and 1 or 0, pan, vol })
   else
     run_in_background(string.format("afplay -v %.2f %s", (tonumber(vol) or 100) / 100, shell_quote(path)))
   end
@@ -125,13 +177,13 @@ end
 
 function M.stop_sound(id)
   if M.connected() then
-    M.link:send({ "SOUND_STOP", id })
+    M.call(raw_send, { "SOUND_STOP", id })
   end
 end
 
 function M.set_pitch(id, value)
   if M.connected() then
-    M.link:send({ "SOUND_PITCH", id, value })
+    M.call(raw_send, { "SOUND_PITCH", id, value })
   end
 end
 
@@ -150,7 +202,7 @@ end
 function M.prompt_text(title, caption, default)
   local id = next_prompt_id()
   if M.connected() then
-    M.link:send({ "PROMPT_TEXT", id, title, caption, default })
+    M.call(raw_send, { "PROMPT_TEXT", id, title, caption, default })
   else
     cancel_locally(id, "text")
   end
@@ -172,7 +224,7 @@ function M.prompt_choice(title, caption, items, multi, default)
     for _, item in ipairs(items) do
       fields[#fields + 1] = item
     end
-    M.link:send(fields)
+    M.call(raw_send, fields)
   else
     cancel_locally(id, "choice")
   end

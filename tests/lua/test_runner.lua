@@ -62,6 +62,27 @@ runner:shutdown()
 runner:frame()
 check.eq(frames, 2, "a shut down runner does nothing")
 
+-- requests yielded by platform calls are serviced on the main thread
+local REQUEST = {}
+fake.is_request = function(value) return type(value) == "table" and value[REQUEST] == true end
+fake.service = function(request) return table.pack(pcall(request.fn, table.unpack(request.args, 1, request.args.n))) end
+local serviced_on_main = 0
+local function read_on_main(addr)
+  local _, is_main = coroutine.running()
+  if is_main then serviced_on_main = serviced_on_main + 1 end
+  return addr + 1
+end
+local answer
+local requester = Runner.new(fake, api, function()
+  local results = coroutine.yield({ [REQUEST] = true, fn = read_on_main, args = table.pack(41) })
+  answer = results[2]
+  while true do emu.frameadvance() end
+end)
+requester:frame()
+check.eq(answer, 42, "the request's result is passed back to the program")
+check.eq(serviced_on_main, 1, "and the request ran on the main thread")
+check.truthy(requester.alive, "servicing a request keeps the program alive")
+
 -- a program that returns is finished, not an error
 local finished = Runner.new(fake, api, function() end)
 local before = #fake.calls
