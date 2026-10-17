@@ -131,6 +131,25 @@ check.eq(M.connected(), false, "a socket error disconnects")
 M.shutdown()
 fake3.remove()
 
+-- Upstream sorts held key names with table.sort and compares them with its
+-- command table written in ASCII order ("Y" before "shift"). mGBA runs in the
+-- user's locale, where string order is alphabetical and "shift" comes before
+-- "Y", so setup() must put the collate category on the C locale.
+if os.setlocale("en_US.UTF-8", "collate") ~= nil then
+  local names = { "Y", "shift" }
+  table.sort(names)
+  check.eq(names, { "shift", "Y" }, "precondition: the user locale sorts shift before Y")
+  local lib5 = fake_socket.new()
+  local fake5 = fake_mgba.install{ env = { POKEMON_ACCESS_PORT = "48890" }, socket = lib5 }
+  M.setup{}
+  names = { "Y", "shift" }
+  table.sort(names)
+  check.eq(names, { "Y", "shift" }, "setup restores ASCII string order for upstream's key matching")
+  check.eq(tostring(1.5), "1.5", "and numbers keep a decimal point")
+  M.shutdown()
+  fake5.remove()
+end
+
 -- mGBA 0.10.5 rejects API calls made from a coroutine ("Function called from
 -- invalid context"), so calls made inside the program coroutine must be
 -- handed to the main thread through yielded requests the runner services.

@@ -138,7 +138,14 @@ end
 -- Keys ----------------------------------------------------------------------
 
 function M.held_keys()
-  return M.keys:held()
+  local held = M.keys:held()
+  if M.debug_keys and next(held) ~= nil then
+    local names = {}
+    for name in pairs(held) do names[#names + 1] = name end
+    table.sort(names)
+    M.log("held keys: " .. table.concat(names, "+"))
+  end
+  return held
 end
 
 -- Speech --------------------------------------------------------------------
@@ -241,6 +248,9 @@ end
 
 local function on_key(fields)
   local chord = fields[3] or ""
+  if M.debug_keys then
+    M.log("key message: " .. tostring(fields[2]) .. " " .. chord)
+  end
   if fields[2] == "DOWN" then
     M.keys:press(chord)
   elseif fields[2] == "UP" then
@@ -326,6 +336,13 @@ end
 -- opts.key_source ("auto" | "helper" | "lua").
 function M.setup(opts)
   opts = opts or {}
+  -- mGBA runs in the user's locale. Upstream was written for the C locale:
+  -- it formats numbers with a decimal point and sorts held key names with
+  -- table.sort before comparing them with its command table in ASCII order
+  -- ("Y" before "shift"; alphabetical collation would put "shift" first and
+  -- shift+Y or shift+V would never match).
+  os.setlocale("C", "numeric")
+  os.setlocale("C", "collate")
   M.runtime = {
     emu = emu,
     callbacks = callbacks,
@@ -341,6 +358,7 @@ function M.setup(opts)
   M.key_source = source
   M.port = tonumber(opts.port or os.getenv("POKEMON_ACCESS_PORT"))
   M.token = opts.token or os.getenv("POKEMON_ACCESS_TOKEN")
+  M.debug_keys = os.getenv("POKEMON_ACCESS_DEBUG_KEYS") ~= nil
   M.keys = Keys.new()
   M.replies = {}
   M.next_prompt_id = 0

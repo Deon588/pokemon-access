@@ -9,9 +9,6 @@ local source = debug.getinfo(1, "S").source
 local script_dir = source:sub(2):match("(.*[/\\])") or "./"
 package.path = script_dir .. "?.lua;" .. package.path
 
--- Upstream formats numbers with %f; keep the decimal point whatever the user locale.
-os.setlocale("C", "numeric")
-
 local platform = require("platform.mgba")
 local compat = require("compat.vba_api")
 local Runner = require("platform.runner")
