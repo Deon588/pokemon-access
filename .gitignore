@@ -12,3 +12,6 @@ tools/mgba-probe/probe_config.lua
 *.gba
 *.sav
 *.ss?
+# SwiftPM build products
+helper/.build/
+build/
