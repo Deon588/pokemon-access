@@ -68,8 +68,14 @@ isolate mGBA's settings with `XDG_CONFIG_HOME`, which this build honours.
 
 Other evidence: mGBA source for 0.10.5 and master (Lua engine, Qt scripting
 controller, command line, autorun model), the official scripting docs (written for
-0.10.2), a Lua 5.4.9 parse of every upstream file (`luac -p`: all 170 files parse),
-and a throwaway Swift speech spike compiled with `swiftc`.
+0.10.2), a Lua 5.4.9 parse of every upstream file (`luac -p`: all 166 files parse),
+and a throwaway Swift speech spike compiled with `swiftc`. A fresh reviewer read a
+draft of this document against the repository; its corrections are folded in.
+
+nuive's own GitHub forks of mgba and visualboyadvance-m contain nothing related to
+these scripts (the mGBA fork is zero commits ahead of upstream, the VBA-M fork has
+one unrelated commit), so there is no upstream mGBA port to build on or coordinate
+with.
 
 ## 3. Upstream touchpoint inventory
 
@@ -84,7 +90,7 @@ Files on the Red/Blue path: `pokemon.lua` (entry), `gb.lua` (Game Boy engine),
 
 | Call | What it does | Where it is used | mGBA replacement |
 |------|--------------|------------------|------------------|
-| `memory.readbyte(addr)`, `memory.readbyteunsigned(addr)` | 8-bit read at a Game Boy bus address (0x8000 to 0xFFFF in practice) | `pokemon.lua:176,758,762,995`; `gb.lua:254,267,540-542,558,628-629,640`; `rby.lua` 45 sites (map header, objects, flags, keyboard cursor); `game/red_blue/main.lua:5` | `emu:read8(addr)`; verified bus semantics |
+| `memory.readbyte(addr)`, `memory.readbyteunsigned(addr)` | 8-bit read at a Game Boy bus address: RAM, VRAM, and ROM bank 0 for the cartridge header (`pokemon.lua:995` reads 0x13F) | `pokemon.lua:176,758,762,995`; `gb.lua:254,267,540-542,558,628-629,640`; `rby.lua` 35 sites (map header, objects, flags, keyboard cursor); `game/red_blue/main.lua:5` | `emu:read8(addr)`; verified bus semantics, including `0x134` in ROM bank 0 |
 | `memory.readword(addr)` | 16-bit little-endian read at a bus address | `gb.lua:321-330`; `rby.lua:90,196,231,370,405,604` | `emu:read16(addr)`; verified |
 | `memory.readbyterange(addr, n)` | Returns a 1-based table of `n` bytes | `gb.lua:47` (the 20x18 tile map at 0xC3A0, every frame); `pokemon.lua:917` (ROM title) | `emu:readRange(addr, n)` returns a string; wrap as `{s:byte(1, -1)}` |
 | `memory.gbromreadbyte(off)`, `memory.gbromreadword(off)` | Read from the ROM image by linear offset, independent of the mapped bank (offsets up to 0x707a9 are used) | `gb.lua:187-195,653`; `rby.lua:91-92,129-158,199-244,377-380,411-414` | `emu.memory.cart0:read8(off)` / `:read16(off)`; verified linear across banks (`PROBE2` at 0x8100, `PROBE3` at 0xC100) |
@@ -123,7 +129,7 @@ Files on the Red/Blue path: `pokemon.lua` (entry), `gb.lua` (Game Boy engine),
 | `loadstring`, `setfenv` | `serpent.lua` | nil, but serpent already falls back to `load` and guards `setfenv` | None |
 | Locale | `string.format("%0.2f%%")` at `gb.lua:543` | mGBA's process runs with the user's locale: `%.3f` printed `0,322` | Call `os.setlocale("C", "numeric")` at start, or format health without `%f` |
 
-Everything parses under Lua 5.4.9 (`luac -p` on all 170 files reported no errors), so
+Everything parses under Lua 5.4.9 (`luac -p` on all 166 files reported no errors), so
 the differences are runtime only.
 
 ### 3.4 Keyboard commands expected by upstream
@@ -214,6 +220,14 @@ arrive only while an mGBA window has keyboard focus, which is also what the upst
 scripts assume. Mapping to upstream names is direct: `string.char(key)` for letters
 and digits, `"shift"` from the modifier mask.
 
+Not yet verified: how the shift+0 chord (hack ROM setup) arrives. Qt reports the key
+of the produced character for printable keys, so shift+0 is expected to arrive as
+`)` (41) with the shift modifier rather than as `0` (48). The retest is prepared
+(`run_probe.sh` now also sends `5` and shift+0) but the screen locked before it
+could run; it needs an unlocked session. Mitigation either way: in Mode B map shifted
+symbol codes back to their digits with a layout table; Mode A sees hardware key codes
+and is unaffected.
+
 ### 4.5 Sockets
 
 `socket.connect("127.0.0.1", port)` plus `sock:send` delivered a line to a terminal
@@ -244,10 +258,10 @@ the Accessibility permission that the hotkey capture needs anyway.
 | Topic | Finding |
 |-------|---------|
 | AVSpeechSynthesizer from a CLI process | Works without an app bundle. 180 voices installed. First audio callback after 19 ms, `stopSpeaking(at: .immediate)` returns true and the synthesizer is reusable immediately. `swiftc -O` builds the spike in about 19 s. |
-| VoiceOver speech passthrough | `osascript -e 'tell application "VoiceOver" to output "..."'` spoke the text in 0.12 s wall time including process start. Requires "Allow VoiceOver to be controlled with AppleScript" in VoiceOver Utility, which is already enabled on this Mac. Uses the user's own VoiceOver voice and rate with no configuration. The dictionary also offers `open`, `press`, `select` and others. |
+| VoiceOver speech passthrough | `osascript -e 'tell application "VoiceOver" to output "..."'` spoke the text in 0.12 s wall time including process start. Requires "Allow VoiceOver to be controlled with AppleScript" in VoiceOver Utility, which is already enabled on this Mac. Uses the user's own VoiceOver voice and rate with no configuration. The dictionary's `output` command takes text and an optional spelling type and exposes no queue or interrupt parameter, so whether consecutive outputs queue or cut each other off has to be checked by ear in Phase 2; it could not be judged from this unattended session. Upstream depends on queueing (`output_lines` speaks up to 18 lines, `speak_path` one utterance per segment, `read_menu_item` up to three), so this route batches one command's utterances into a single `output` call. |
 | `say` | 2.06 s wall time for a one-word utterance including startup; one process per utterance; no interruption except killing the process. Fallback only. |
 | VoiceOver voice settings | Not readable from `com.apple.VoiceOver4/default.plist` with `plutil` (no voice or rate keys found), so "use VoiceOver's voice" is best achieved by routing speech through VoiceOver itself (above) rather than copying its settings into AVSpeechSynthesizer. |
-| Sound cues | mGBA's Lua has no audio API on either version. The helper can preload the 35 WAV files (1.7 MB) into `AVAudioPlayer` instances, which expose `pan` (-1..1) and `volume` (0..1), matching `audio.play`'s pan -100..100 and volume 0..100. `/usr/bin/afplay` exists for a fallback without pan. |
+| Sound cues | mGBA's Lua has no audio API on either version. The helper can preload the 33 WAV files (1.7 MB, 17 of them used on the Red/Blue path) into `AVAudioPlayer` instances, which expose `pan` (-1..1) and `volume` (0..1), matching `audio.play`'s pan -100..100 and volume 0..100. `/usr/bin/afplay` exists for a fallback without pan. |
 | Dialogs | `NSAlert` with an accessory text field or a pop-up list is standard Cocoa and reads correctly in VoiceOver. AppleScript `display dialog` and `choose from list` would also work but block the emulator thread if called from Lua. |
 | Accessibility permission | This session's parent app already has it (`AXIsProcessTrusted` true), which is why the probe could drive mGBA. A standalone helper app needs its own grant: `AXIsProcessTrustedWithOptions` with the prompt option opens the right System Settings pane. The permission covers both the `CGEventTap` hotkey capture and the AX-driven script loading. |
 | Native toolchain | Swift 6.4 (`swiftc` and SwiftPM) with Xcode installed; Python 3.14 and Homebrew available. No Rosetta involved anywhere. |
@@ -295,9 +309,11 @@ the Accessibility permission that the hotkey capture needs anyway.
 5. `helper/` (SwiftPM package `PokemonAccessHelper`, `swift build -c release`,
    arm64 native). One executable with subcommands or flags:
    - server: listens on 127.0.0.1 (default port 46000, configurable), one client.
-   - speech engine: AVSpeechSynthesizer queue with configurable voice and rate,
-     `interrupt` support; `--speech voiceover` routes utterances to VoiceOver via
-     `NSAppleScript` in-process.
+   - speech engine: AVSpeechSynthesizer queue with configurable voice and rate and
+     `interrupt` support (verified to queue and to stop on demand); `--speech
+     voiceover` routes utterances to VoiceOver via `NSAppleScript` in-process,
+     batching all utterances received within one frame into a single `output`
+     call because that route has no queue control.
    - sound engine: preloads `sounds/**` relative to the repository, plays with pan
      and volume.
    - hotkeys: a `CGEventTap` active only while the frontmost app is
@@ -323,7 +339,9 @@ Lua to helper: `HELLO <protocol-version>`, `SPEAK <0|1 interrupt> <text>`, `SILE
 `LOG <text>`.
 
 Helper to Lua: `WELCOME <helper-version> <0.10|0.11 mode>`, `KEY DOWN|UP <name>`
-(name as upstream expects: `T`, `SHIFT`, `0`), `REPLY <id> OK|CANCEL <value>...`.
+(name exactly as upstream's `commands` table spells it: uppercase letters and digits
+such as `T` and `0`, but lowercase `shift`; the match at `pokemon.lua:474-487` is a
+sorted string comparison), `REPLY <id> OK|CANCEL <value>...`.
 
 Flow for a dialog: upstream calls `controls.inputbox` synchronously; the shim sends
 `PROMPT_TEXT` and loops `coroutine.yield()` (one frame per iteration) until the
@@ -384,6 +402,8 @@ local table, and `unpack = unpack or table.unpack`.
 | Locale decimal comma | Set the numeric locale to C in the entry script |
 | Footstep detection by polling differs slightly from the exec hook | Fire on player x/y or map change while `on_map()`; use the breakpoint on 0.11 |
 | VoiceOver single-key Quick Nav intercepts letters | Document that Quick Nav must be off while playing, as with any game |
+| The volume and pan scale of the Windows `audio.dll` is unknown: its source is not published, and nuive's forks of mGBA and VBA-M carry no related change. Upstream passes volumes of 5 to 40 and pan steps of 5 per tile | Treat volume as linear percent and pan as linear, expose a global gain in the helper config, calibrate by ear against the Windows build before Phase 3 step 7 |
+| macOS ties the Accessibility grant to the helper's code signature, so an unsigned rebuild loses it | Sign development builds with a stable identity (`codesign -s` with a Developer ID or a locally created certificate) and re-check the grant on every start |
 
 ## 7. Phase 3 steps, mapped to the pieces above
 
@@ -399,6 +419,9 @@ local table, and `unpack = unpack or table.unpack`.
 6. `h` and shift+h: modifier handling in the key path.
 7. Camera keys: sound engine with pan and volume.
 8. Sound cues: footstep detection replacing `registerexec(0x603)`.
+9. Proposed addition: shift+K and shift+M rename prompts through `PROMPT_TEXT` and
+   the yield-until-reply shim. Hack ROM setup (shift+0, list prompts plus directory
+   listing) stays out until a later phase; see decision 6.
 
 ## 8. Decisions needed before Phase 2
 
@@ -414,3 +437,13 @@ local table, and `unpack = unpack or table.unpack`.
    (recommended for Phase 3), or an application bundle from the start.
 5. The path to your Pokémon Red or Blue ROM for Phase 3 testing. Nothing in Phase 1
    needed it; the probe used a generated test ROM.
+6. Dialog-driven commands in the first release. Shift+K and shift+M (rename) need the
+   text prompt; shift+0 (hack ROM setup) needs four or five list prompts plus
+   directory listing, which mGBA's Lua cannot do by itself. Recommendation: rename
+   prompts as Phase 3 step 9, hack ROM setup deferred. English Red and Blue are
+   recognised by header checksums 0x91e6 and 0x9d0a (`gb.lua:13,19`), so a standard
+   dump needs no setup; any other dump would currently be reported as unsupported.
+7. Who installs the first release. This Mac only, built from source (recommended for
+   Phase 3), or other players, which adds a stable signing identity, notarization, a
+   prebuilt download and a minimum macOS version to test. Everything so far ran on
+   macOS 27.0.1 with Swift 6.4.
