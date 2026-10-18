@@ -863,6 +863,9 @@ fonts = {}
 maps = {}
 sprites = {}
 default_language = "en"
+-- Load the default strings now, so messages spoken before the game is
+-- recognised ("Game not supported.") are words instead of message ids.
+message.set_strings(default_language)
 pathfind_hm_available = false
 pathfind_hm_all = false
 camera_follow_player = true

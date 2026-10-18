@@ -401,6 +401,10 @@ end
 table.insert(allnodes, n)
 end -- x
 end -- y
+-- no node for the player or the destination (map data not ready): no path
+if start == nil or dest == nil then
+return nil
+end
 path = astar.path(start, dest, allnodes, true, valid_path)
 return path
 end
